@@ -1,0 +1,558 @@
+{
+  "evidence": "Invented projections and scripted intent probabilities only. No new provider calls, quality claim or production integration.",
+  "rows": [
+    {
+      "fixture": "current-continuation",
+      "expected": "continue-current",
+      "baseline": {
+        "decision": "continue-current",
+        "missedBoundary": false,
+        "superfluousBoundary": false
+      },
+      "advisory": {
+        "decision": "continue-current",
+        "missedBoundary": false,
+        "superfluousBoundary": false,
+        "disagreement": false,
+        "titleFlag": false,
+        "probabilities": {
+          "significantChange": 0.9,
+          "continueCurrent": 0.95,
+          "titleAdequate": 0.9
+        }
+      },
+      "requestCount": 1,
+      "latencyMs": 7,
+      "disclosedFields": [
+        "current",
+        "current.title",
+        "current.messages",
+        "current.messages[0]",
+        "current.messages[1]",
+        "latestUserMessage"
+      ],
+      "disclosed": {
+        "current": {
+          "title": "Walmart inventory planning",
+          "messages": [
+            "For an invented shop, plan Walmart stock handling.",
+            "Keep the stock plan to the two invented warehouses."
+          ]
+        },
+        "latestUserMessage": "Add a reorder checklist for the same Walmart stock plan."
+      }
+    },
+    {
+      "fixture": "misleading-shared-product",
+      "expected": "continue-current",
+      "baseline": {
+        "decision": "continue-current",
+        "missedBoundary": false,
+        "superfluousBoundary": false
+      },
+      "advisory": {
+        "decision": "continue-current",
+        "missedBoundary": false,
+        "superfluousBoundary": false,
+        "disagreement": false,
+        "titleFlag": false,
+        "probabilities": {
+          "significantChange": 0.9,
+          "continueCurrent": 0.95,
+          "titleAdequate": 0.9
+        }
+      },
+      "requestCount": 1,
+      "latencyMs": 7,
+      "disclosedFields": [
+        "current",
+        "current.title",
+        "current.messages",
+        "current.messages[0]",
+        "current.messages[1]",
+        "latestUserMessage"
+      ],
+      "disclosed": {
+        "current": {
+          "title": "Walmart inventory planning",
+          "messages": [
+            "For an invented shop, plan Walmart stock handling.",
+            "Keep the stock plan to the two invented warehouses."
+          ]
+        },
+        "latestUserMessage": "Plan Walmart receiving checks for BE3600 cartons. This is warehouse stock handling, not product analysis."
+      }
+    },
+    {
+      "fixture": "shared-product-separate-intent",
+      "expected": "create-new",
+      "baseline": {
+        "decision": "continue-current",
+        "missedBoundary": true,
+        "superfluousBoundary": false
+      },
+      "advisory": {
+        "decision": "create-new",
+        "missedBoundary": false,
+        "superfluousBoundary": false,
+        "disagreement": true,
+        "titleFlag": false,
+        "probabilities": {
+          "significantChange": 0.9,
+          "continueCurrent": 0.05,
+          "titleAdequate": 0.9
+        }
+      },
+      "requestCount": 1,
+      "latencyMs": 7,
+      "disclosedFields": [
+        "current",
+        "current.title",
+        "current.messages",
+        "current.messages[0]",
+        "current.messages[1]",
+        "latestUserMessage"
+      ],
+      "disclosed": {
+        "current": {
+          "title": "Walmart inventory planning",
+          "messages": [
+            "For an invented shop, plan Walmart stock handling.",
+            "Keep the stock plan to the two invented warehouses."
+          ]
+        },
+        "latestUserMessage": "Write a fictional BE3600 mystery story, unrelated to the inventory plan."
+      }
+    },
+    {
+      "fixture": "brief-tangent",
+      "expected": "continue-current",
+      "baseline": {
+        "decision": "create-new",
+        "missedBoundary": false,
+        "superfluousBoundary": true
+      },
+      "advisory": {
+        "decision": "continue-current",
+        "missedBoundary": false,
+        "superfluousBoundary": false,
+        "disagreement": true,
+        "titleFlag": false,
+        "probabilities": {
+          "significantChange": 0.1,
+          "continueCurrent": 0.4,
+          "titleAdequate": 0.9
+        }
+      },
+      "requestCount": 1,
+      "latencyMs": 7,
+      "disclosedFields": [
+        "current",
+        "current.title",
+        "current.messages",
+        "current.messages[0]",
+        "current.messages[1]",
+        "latestUserMessage"
+      ],
+      "disclosed": {
+        "current": {
+          "title": "Walmart inventory planning",
+          "messages": [
+            "For an invented shop, plan Walmart stock handling.",
+            "Keep the stock plan to the two invented warehouses."
+          ]
+        },
+        "latestUserMessage": "Quick aside: what does reorder mean? Then continue the stock plan."
+      }
+    },
+    {
+      "fixture": "correction",
+      "expected": "continue-current",
+      "baseline": {
+        "decision": "continue-current",
+        "missedBoundary": false,
+        "superfluousBoundary": false
+      },
+      "advisory": {
+        "decision": "continue-current",
+        "missedBoundary": false,
+        "superfluousBoundary": false,
+        "disagreement": false,
+        "titleFlag": false,
+        "probabilities": {
+          "significantChange": 0.9,
+          "continueCurrent": 0.95,
+          "titleAdequate": 0.9
+        }
+      },
+      "requestCount": 1,
+      "latencyMs": 7,
+      "disclosedFields": [
+        "current",
+        "current.title",
+        "current.messages",
+        "current.messages[0]",
+        "current.messages[1]",
+        "latestUserMessage"
+      ],
+      "disclosed": {
+        "current": {
+          "title": "Walmart inventory planning",
+          "messages": [
+            "For an invented shop, plan Walmart stock handling.",
+            "Keep the stock plan to the two invented warehouses."
+          ]
+        },
+        "latestUserMessage": "Correction: the invented inventory has two shelves, not three. Keep the same plan."
+      }
+    },
+    {
+      "fixture": "chinese-new",
+      "expected": "create-new",
+      "baseline": {
+        "decision": "continue-current",
+        "missedBoundary": true,
+        "superfluousBoundary": false
+      },
+      "advisory": {
+        "decision": "create-new",
+        "missedBoundary": false,
+        "superfluousBoundary": false,
+        "disagreement": true,
+        "titleFlag": false,
+        "probabilities": {
+          "significantChange": 0.9,
+          "continueCurrent": 0.05,
+          "titleAdequate": 0.9
+        }
+      },
+      "requestCount": 1,
+      "latencyMs": 7,
+      "disclosedFields": [
+        "current",
+        "current.title",
+        "current.messages",
+        "current.messages[0]",
+        "current.messages[1]",
+        "latestUserMessage"
+      ],
+      "disclosed": {
+        "current": {
+          "title": "Walmart inventory planning",
+          "messages": [
+            "For an invented shop, plan Walmart stock handling.",
+            "Keep the stock plan to the two invented warehouses."
+          ]
+        },
+        "latestUserMessage": "現在另外設計一個虛構的月球車遊戲，與庫存無關。"
+      }
+    },
+    {
+      "fixture": "mixed-continuation",
+      "expected": "continue-current",
+      "baseline": {
+        "decision": "continue-current",
+        "missedBoundary": false,
+        "superfluousBoundary": false
+      },
+      "advisory": {
+        "decision": "continue-current",
+        "missedBoundary": false,
+        "superfluousBoundary": false,
+        "disagreement": false,
+        "titleFlag": false,
+        "probabilities": {
+          "significantChange": 0.9,
+          "continueCurrent": 0.9,
+          "titleAdequate": 0.9
+        }
+      },
+      "requestCount": 1,
+      "latencyMs": 7,
+      "disclosedFields": [
+        "current",
+        "current.title",
+        "current.messages",
+        "current.messages[0]",
+        "current.messages[1]",
+        "latestUserMessage"
+      ],
+      "disclosed": {
+        "current": {
+          "title": "Walmart inventory planning",
+          "messages": [
+            "For an invented shop, plan Walmart stock handling.",
+            "Keep the stock plan to the two invented warehouses."
+          ]
+        },
+        "latestUserMessage": "Walmart inventory 再加一個 reorder point，同一個計劃。"
+      }
+    },
+    {
+      "fixture": "rename-context",
+      "expected": "continue-current",
+      "baseline": {
+        "decision": "continue-current",
+        "missedBoundary": false,
+        "superfluousBoundary": false
+      },
+      "advisory": {
+        "decision": "continue-current",
+        "missedBoundary": false,
+        "superfluousBoundary": false,
+        "disagreement": false,
+        "titleFlag": false,
+        "probabilities": {
+          "significantChange": 0.9,
+          "continueCurrent": 0.95,
+          "titleAdequate": 0.9
+        }
+      },
+      "requestCount": 1,
+      "latencyMs": 7,
+      "disclosedFields": [
+        "current",
+        "current.title",
+        "current.messages",
+        "current.messages[0]",
+        "current.messages[1]",
+        "latestUserMessage"
+      ],
+      "disclosed": {
+        "current": {
+          "title": "Walmart inventory planning",
+          "messages": [
+            "For an invented shop, plan Walmart stock handling.",
+            "Keep the stock plan to the two invented warehouses."
+          ]
+        },
+        "latestUserMessage": "The inventory title is misleading: this is still the same Walmart stock work, not a launch."
+      }
+    },
+    {
+      "fixture": "debatable-subproblem",
+      "expected": null,
+      "baseline": {
+        "decision": "continue-current",
+        "missedBoundary": null,
+        "superfluousBoundary": null
+      },
+      "advisory": {
+        "decision": "create-new",
+        "missedBoundary": null,
+        "superfluousBoundary": null,
+        "disagreement": true,
+        "titleFlag": false,
+        "probabilities": {
+          "significantChange": 0.6,
+          "continueCurrent": 0.45,
+          "titleAdequate": 0.9
+        }
+      },
+      "requestCount": 1,
+      "latencyMs": 7,
+      "disclosedFields": [
+        "current",
+        "current.title",
+        "current.messages",
+        "current.messages[0]",
+        "current.messages[1]",
+        "latestUserMessage"
+      ],
+      "disclosed": {
+        "current": {
+          "title": "Walmart inventory planning",
+          "messages": [
+            "For an invented shop, plan Walmart stock handling.",
+            "Keep the stock plan to the two invented warehouses."
+          ]
+        },
+        "latestUserMessage": "Could stock planning become a separate reusable handbook for other shops?"
+      }
+    },
+    {
+      "fixture": "queued-new",
+      "expected": "create-new",
+      "baseline": {
+        "decision": "continue-current",
+        "missedBoundary": true,
+        "superfluousBoundary": false
+      },
+      "advisory": {
+        "decision": "create-new",
+        "missedBoundary": false,
+        "superfluousBoundary": false,
+        "disagreement": true,
+        "titleFlag": false,
+        "probabilities": {
+          "significantChange": 0.9,
+          "continueCurrent": 0.05,
+          "titleAdequate": 0.9
+        }
+      },
+      "requestCount": 1,
+      "latencyMs": 7,
+      "disclosedFields": [
+        "current",
+        "current.title",
+        "current.messages",
+        "current.messages[0]",
+        "current.messages[1]",
+        "latestUserMessage"
+      ],
+      "disclosed": {
+        "current": {
+          "title": "Walmart inventory planning",
+          "messages": [
+            "For an invented shop, plan Walmart stock handling.",
+            "Keep the stock plan to the two invented warehouses."
+          ]
+        },
+        "latestUserMessage": "Queue this: after the inventory answer, plan the invented BE3600 sales campaign."
+      }
+    },
+    {
+      "fixture": "provider-refused",
+      "expected": "continue-current",
+      "baseline": {
+        "decision": "continue-current",
+        "missedBoundary": false,
+        "superfluousBoundary": false
+      },
+      "advisory": {
+        "unavailable": "refused",
+        "fallback": "continue-current"
+      },
+      "requestCount": 1,
+      "latencyMs": 7,
+      "disclosedFields": [
+        "current",
+        "current.title",
+        "current.messages",
+        "current.messages[0]",
+        "current.messages[1]",
+        "latestUserMessage"
+      ],
+      "disclosed": {
+        "current": {
+          "title": "Walmart inventory planning",
+          "messages": [
+            "For an invented shop, plan Walmart stock handling.",
+            "Keep the stock plan to the two invented warehouses."
+          ]
+        },
+        "latestUserMessage": "Add a shelf to the same invented inventory plan."
+      }
+    },
+    {
+      "fixture": "provider-timeout",
+      "expected": "continue-current",
+      "baseline": {
+        "decision": "continue-current",
+        "missedBoundary": false,
+        "superfluousBoundary": false
+      },
+      "advisory": {
+        "unavailable": "timeout",
+        "fallback": "continue-current"
+      },
+      "requestCount": 1,
+      "latencyMs": 7,
+      "disclosedFields": [
+        "current",
+        "current.title",
+        "current.messages",
+        "current.messages[0]",
+        "current.messages[1]",
+        "latestUserMessage"
+      ],
+      "disclosed": {
+        "current": {
+          "title": "Walmart inventory planning",
+          "messages": [
+            "For an invented shop, plan Walmart stock handling.",
+            "Keep the stock plan to the two invented warehouses."
+          ]
+        },
+        "latestUserMessage": "Add a shelf to the same invented inventory plan."
+      }
+    },
+    {
+      "fixture": "provider-malformed",
+      "expected": "continue-current",
+      "baseline": {
+        "decision": "continue-current",
+        "missedBoundary": false,
+        "superfluousBoundary": false
+      },
+      "advisory": {
+        "unavailable": "malformed",
+        "fallback": "continue-current"
+      },
+      "requestCount": 1,
+      "latencyMs": 7,
+      "disclosedFields": [
+        "current",
+        "current.title",
+        "current.messages",
+        "current.messages[0]",
+        "current.messages[1]",
+        "latestUserMessage"
+      ],
+      "disclosed": {
+        "current": {
+          "title": "Walmart inventory planning",
+          "messages": [
+            "For an invented shop, plan Walmart stock handling.",
+            "Keep the stock plan to the two invented warehouses."
+          ]
+        },
+        "latestUserMessage": "Add a shelf to the same invented inventory plan."
+      }
+    },
+    {
+      "fixture": "provider-missing",
+      "expected": "continue-current",
+      "baseline": {
+        "decision": "continue-current",
+        "missedBoundary": false,
+        "superfluousBoundary": false
+      },
+      "advisory": {
+        "unavailable": "missing-answers",
+        "fallback": "continue-current"
+      },
+      "requestCount": 1,
+      "latencyMs": 7,
+      "disclosedFields": [
+        "current",
+        "current.title",
+        "current.messages",
+        "current.messages[0]",
+        "current.messages[1]",
+        "latestUserMessage"
+      ],
+      "disclosed": {
+        "current": {
+          "title": "Walmart inventory planning",
+          "messages": [
+            "For an invented shop, plan Walmart stock handling.",
+            "Keep the stock plan to the two invented warehouses."
+          ]
+        },
+        "latestUserMessage": "Add a shelf to the same invented inventory plan."
+      }
+    }
+  ],
+  "totals": {
+    "baselineMissed": 3,
+    "baselineSuperfluous": 1,
+    "advisoryMissed": 0,
+    "advisorySuperfluous": 0,
+    "disagreements": 5,
+    "titleFlags": 0,
+    "unavailable": 4,
+    "requestCount": 14,
+    "latencyMs": 98
+  }
+}

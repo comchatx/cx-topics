@@ -1,0 +1,48 @@
+{
+  "name": "@comchatx/cx-topics",
+  "version": "0.1.3",
+  "description": "Names your conversations and retrieves the messages you quote.",
+  "license": "MIT",
+  "author": "ComChatX",
+  "homepage": "https://github.com/comchatx/cx-topics#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/comchatx/cx-topics.git"
+  },
+  "bugs": "https://github.com/comchatx/cx-topics/issues",
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./dist/extensions"
+    ]
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepack": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "comchatx": {
+    "about": "为对话生成标题，并读取你引用的消息及上下文。",
+    "mark": {
+      "line": "hash"
+    },
+    "section": "extensions",
+    "order": 100
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.4.0",
+    "@types/node": "26.2.0",
+    "esbuild": "0.27.2",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}

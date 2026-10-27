@@ -1,0 +1,66 @@
+{
+  "providers": {
+    "typesafe": {
+      "baseUrl": "http://127.0.0.1:8081/providers/typesafe/v1",
+      "apiKey": "cmx-placeholder-key"
+    },
+    "balance": {
+      "baseUrl": "http://127.0.0.1:8081/providers/platform/openrouter/api/v1",
+      "apiKey": "cmx-placeholder-key",
+      "aggregator": true,
+      "models": [
+        {
+          "id": "minimax/minimax-m3",
+          "name": "MiniMax: MiniMax M3",
+          "api": "openai-completions",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.3,
+            "output": 1.2,
+            "cacheRead": 0.06,
+            "cacheWrite": 0
+          },
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "maxWidth": 2000,
+                "maxHeight": 2000,
+                "maxBytes": 4718592,
+                "jpegQuality": 80
+              }
+            }
+          },
+          "aa": "minimax-m3",
+          "intelligenceIndex": 29,
+          "costPerTask": 0.51,
+          "baseUrl": "http://127.0.0.1:8081/providers/platform/openrouter/api/v1",
+          "contextWindow": 524288,
+          "maxTokens": 131072,
+          "compat": {
+            "supportsDeveloperRole": false,
+            "thinkingFormat": "openrouter",
+            "sendSessionAffinityHeaders": true,
+            "sessionAffinityFormat": "openrouter",
+            "supportsStrictMode": true
+          }
+        }
+      ],
+      "modelOverrides": {
+        "minimax/minimax-m3": {
+          "compat": {
+            "openRouterRouting": {
+              "only": [
+                "minimax"
+              ],
+              "allow_fallbacks": false
+            }
+          }
+        }
+      }
+    }
+  }
+}
