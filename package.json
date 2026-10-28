@@ -1,6 +1,6 @@
 {
   "name": "@comchatx/cx-topics",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Names your conversations and retrieves the messages you quote.",
   "license": "MIT",
   "author": "ComChatX",
