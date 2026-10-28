@@ -80,6 +80,19 @@ it("titles a message on the model the seller switched to since the last title", 
   expect(record.messages.map(m => m.calls.find(call => call.kind === "title")?.model)).toEqual([`balance/${CALIBRATED.model}`, undefined, `balance/${other.model}`, undefined, undefined]);
 });
 
+it("titles on a virtual model the seller selected, routed by pi to its physical model: one request, to that model", async () => {
+  const { dir, registry, listener } = await rig();
+  // pi routes only to a model whose provider it has seen credentials for, which a refresh records.
+  await registry.refresh();
+  const physical = registry.find(CALIBRATED.provider, CALIBRATED.model)!;
+  let routes = 0;
+  registry.registerVirtualModel({ provider: "invented-router", id: "auto", name: "Invented Auto", route: () => { routes += 1; return { model: physical, thinkingLevel: "off" }; } });
+  const record = await replayCase(registry, { ...CASE, messages: CASE.messages.slice(0, 1) }, { spent: 0, limit: 2 }, dir, () => ({ provider: "invented-router", model: "auto" }));
+  expect(record.messages[0]).toMatchObject({ verdict: "first", stopped: false, titled: { title: "Plan the inv", on: 0 }, calls: [{ kind: "title", model: "invented-router/auto" }] });
+  expect(record.messages[0]!.calls[0]!.failure).toBeUndefined();
+  expect([routes, titledOn(listener.seen)]).toEqual([1, [CALIBRATED.model]]);
+});
+
 it("writes no title where pi holds no key for the session's model, asking it nothing and no other model instead, and stops there", async () => {
   const { dir, registry, listener } = await rig();
   delete process.env.CMX_KEY_OPENROUTER;

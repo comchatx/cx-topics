@@ -52,9 +52,9 @@ export function context(entries: SessionEntry[], answer: (question: string) => n
         asked.push({ state: request.state, questions: request.questions, options });
         return reply(request.questions);
       }),
-      complete: vi.fn(async (_model: unknown, request: Titled["context"], options: Record<string, unknown>) => {
+      streamSimple: vi.fn((_model: unknown, request: Titled["context"], options: Record<string, unknown>) => {
         titled.push({ context: request, options });
-        return write();
+        return { result: write };
       }),
     },
     model: model as { readonly id: string; readonly provider: string } | undefined,

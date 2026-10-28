@@ -14,8 +14,8 @@ export type Verdict = { readonly decision: "continue"; readonly stale: boolean }
 /** What the judge reads of pi: the branch and its labels, any entry by id, the classifier, and the model the seller is chatting on. */
 export type JudgeContext = {
   readonly sessionManager: { getBranch(): SessionEntry[]; getEntry(id: string): SessionEntry | undefined; getLabel(id: string): string | undefined };
-  readonly modelRegistry: Pick<ModelRegistry, "findOfType" | "classify" | "complete">;
-  readonly model: Parameters<ModelRegistry["complete"]>[0] | undefined;
+  readonly modelRegistry: Pick<ModelRegistry, "findOfType" | "classify" | "streamSimple">;
+  readonly model: Parameters<ModelRegistry["streamSimple"]>[0] | undefined;
 };
 
 type Said = Extract<SessionEntry, { type: "message" }>;
@@ -91,18 +91,19 @@ export type Titled = { readonly text: string } | { readonly failure: AnswerFailu
 
 /**
  * A title from the model the seller is chatting on, read from pi at the call, so a model switched since the last title writes the next;
- * through pi's own nested call, within `ROUTING_LIMITS.titleMs` and on no other signal, as Jev's call; only an answer pi ends with `stop`
- * is one. Anything else is a failure read as Jev's is (`failureOf`): a refusal, among them a model pi holds no key or sign-in for, a
+ * through pi's own nested call for whatever the seller can select, which routes a virtual model to the model it picks before the request
+ * (`streamSimple`; `complete` refuses one), within `ROUTING_LIMITS.titleMs` and on no other signal, as Jev's call; only an answer pi
+ * ends with `stop` is one. Anything else is a failure read as Jev's is (`failureOf`): a refusal, among them a model pi holds no key or sign-in for, a
  * timeout, a cut answer, no model chosen. The package has no model of its own to fall back on.
  */
 export const titler = (ctx: JudgeContext) => async (request: TitleRequest): Promise<Titled> => {
   const model = ctx.model;
   if (model === undefined) return { failure: "no-model" };
   try {
-    const answer = await ctx.modelRegistry.complete(model, {
+    const answer = await ctx.modelRegistry.streamSimple(model, {
       systemPrompt: TITLE_SYSTEM,
       messages: [{ role: "user", content: [{ type: "text", text: titlePrompt(request) }], timestamp: Date.now() }],
-    }, { maxTokens: ROUTING_LIMITS.titleTokens, signal: AbortSignal.timeout(ROUTING_LIMITS.titleMs), cacheRetention: "none" });
+    }, { maxTokens: ROUTING_LIMITS.titleTokens, signal: AbortSignal.timeout(ROUTING_LIMITS.titleMs), cacheRetention: "none" }).result();
     if (answer.stopReason !== "stop") return { failure: failureOf(answer as unknown as Record<string, unknown>) };
     return { text: answer.content.flatMap(block => (block.type === "text" ? [block.text] : [])).join(" ") };
   } catch {

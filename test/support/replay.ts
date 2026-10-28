@@ -52,7 +52,7 @@ const chinese = (text: string): boolean => /[\u3400-\u9fff]/.test(text);
 /** Thrown before a message is judged once the budget is spent: the replay stops there. The judge swallows what its calls throw, so the check is not inside them. */
 export class OverBudget extends Error {}
 
-type Registry = Pick<ModelRegistry, "findOfType" | "classify" | "find" | "complete">;
+type Registry = Pick<ModelRegistry, "findOfType" | "classify" | "find" | "streamSimple">;
 
 const failureText = (stopReason: string, errorMessage: unknown) => `${stopReason}${typeof errorMessage === "string" ? `: ${errorMessage.slice(0, 200)}` : ""}`;
 
@@ -72,12 +72,18 @@ function recording(registry: Registry, budget: { spent: number; readonly limit: 
       calls.push({ kind: "jev", model: `${model.provider}/${model.id}`, inputTokens: input, outputTokens: result.usage?.output ?? 0, usd, units: usd * MARGIN * UNITS_PER_USD, ...(result.stopReason === "stop" ? {} : { failure: failureText(result.stopReason, result.errorMessage) }) });
       return result;
     },
-    async complete(model, context, options) {
-      const answer = await registry.complete(model, context, options);
-      const usd = answer.usage?.cost?.total ?? 0;
-      budget.spent += usd;
-      calls.push({ kind: "title", model: `${model.provider}/${model.id}`, inputTokens: answer.usage?.input ?? 0, outputTokens: answer.usage?.output ?? 0, usd, units: usd * MARGIN * UNITS_PER_USD, ...(answer.stopReason === "stop" ? {} : { failure: failureText(answer.stopReason, answer.errorMessage) }) });
-      return answer;
+    streamSimple(model, context, options) {
+      const stream = registry.streamSimple(model, context, options);
+      const result = stream.result.bind(stream);
+      return Object.assign(stream, {
+        async result() {
+          const answer = await result();
+          const usd = answer.usage?.cost?.total ?? 0;
+          budget.spent += usd;
+          calls.push({ kind: "title" as const, model: `${model.provider}/${model.id}`, inputTokens: answer.usage?.input ?? 0, outputTokens: answer.usage?.output ?? 0, usd, units: usd * MARGIN * UNITS_PER_USD, ...(answer.stopReason === "stop" ? {} : { failure: failureText(answer.stopReason, answer.errorMessage) }) });
+          return answer;
+        },
+      });
     },
   };
   return { wrapped, take: () => { const taken = { calls: calls.splice(0), answered }; answered = undefined; return taken; } };
