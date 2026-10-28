@@ -52,7 +52,7 @@ const chinese = (text: string): boolean => /[\u3400-\u9fff]/.test(text);
 /** Thrown before a message is judged once the budget is spent: the replay stops there. The judge swallows what its calls throw, so the check is not inside them. */
 export class OverBudget extends Error {}
 
-type Registry = Pick<ModelRegistry, "findOfType" | "classify" | "find" | "streamSimple">;
+type Registry = Pick<ModelRegistry, "findOfType" | "classify" | "find" | "complete" | "streamSimple">;
 
 const failureText = (stopReason: string, errorMessage: unknown) => `${stopReason}${typeof errorMessage === "string" ? `: ${errorMessage.slice(0, 200)}` : ""}`;
 
@@ -60,6 +60,12 @@ const failureText = (stopReason: string, errorMessage: unknown) => `${stopReason
 function recording(registry: Registry, budget: { spent: number; readonly limit: number }) {
   const calls: Call[] = [];
   let answered: unknown;
+  const titled = <T extends Awaited<ReturnType<ModelRegistry["complete"]>>>(model: { readonly provider: string; readonly id: string }, answer: T): T => {
+    const usd = answer.usage?.cost?.total ?? 0;
+    budget.spent += usd;
+    calls.push({ kind: "title", model: `${model.provider}/${model.id}`, inputTokens: answer.usage?.input ?? 0, outputTokens: answer.usage?.output ?? 0, usd, units: usd * MARGIN * UNITS_PER_USD, ...(answer.stopReason === "stop" ? {} : { failure: failureText(answer.stopReason, answer.errorMessage) }) });
+    return answer;
+  };
   const wrapped: Registry = {
     findOfType: registry.findOfType.bind(registry),
     find: registry.find.bind(registry),
@@ -72,18 +78,13 @@ function recording(registry: Registry, budget: { spent: number; readonly limit: 
       calls.push({ kind: "jev", model: `${model.provider}/${model.id}`, inputTokens: input, outputTokens: result.usage?.output ?? 0, usd, units: usd * MARGIN * UNITS_PER_USD, ...(result.stopReason === "stop" ? {} : { failure: failureText(result.stopReason, result.errorMessage) }) });
       return result;
     },
+    async complete(model, context, options) {
+      return titled(model, await registry.complete(model, context, options));
+    },
     streamSimple(model, context, options) {
       const stream = registry.streamSimple(model, context, options);
       const result = stream.result.bind(stream);
-      return Object.assign(stream, {
-        async result() {
-          const answer = await result();
-          const usd = answer.usage?.cost?.total ?? 0;
-          budget.spent += usd;
-          calls.push({ kind: "title" as const, model: `${model.provider}/${model.id}`, inputTokens: answer.usage?.input ?? 0, outputTokens: answer.usage?.output ?? 0, usd, units: usd * MARGIN * UNITS_PER_USD, ...(answer.stopReason === "stop" ? {} : { failure: failureText(answer.stopReason, answer.errorMessage) }) });
-          return answer;
-        },
-      });
+      return Object.assign(stream, { result: async () => titled(model, await result()) });
     },
   };
   return { wrapped, take: () => { const taken = { calls: calls.splice(0), answered }; answered = undefined; return taken; } };

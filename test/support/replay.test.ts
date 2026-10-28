@@ -1,7 +1,11 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ModelRegistry, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, expect, it } from "vitest";
+import { titler } from "../../src/extensions/judge.js";
 import { CALIBRATION_CASES, type CalibrationCase } from "./calibration-cases.js";
 import { CALIBRATED, keysIn, LIVE, modelsFor, registryFor, replay, replayCase, sheet, type Chat } from "./replay.js";
 import { byWords, standIn, type Scripted } from "./replay-stand-in.js";
@@ -91,6 +95,57 @@ it("titles on a virtual model the seller selected, routed by pi to its physical 
   expect(record.messages[0]).toMatchObject({ verdict: "first", stopped: false, titled: { title: "Plan the inv", on: 0 }, calls: [{ kind: "title", model: "invented-router/auto" }] });
   expect(record.messages[0]!.calls[0]!.failure).toBeUndefined();
   expect([routes, titledOn(listener.seen)]).toEqual([1, [CALIBRATED.model]]);
+});
+
+/**
+ * A loopback listener in an Anthropic Messages provider's place, answering every request with one short title, and pi's own registry
+ * on it with one model that thinks on a budget, as Anthropic's do: where a thinking level reaches its adapter, pi adds that level's
+ * budget to the request's output tokens.
+ */
+async function anthropicRig() {
+  const dir = mkdtempSync(join(tmpdir(), "topics-bound-test-"));
+  const seen: { readonly max_tokens?: number; readonly thinking?: { readonly type: string } }[] = [];
+  const server = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk as Uint8Array));
+    const body = JSON.parse(Buffer.concat(chunks).toString());
+    seen.push(body);
+    const event = (type: string, data: object) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    event("message_start", { message: { id: "m", type: "message", role: "assistant", model: body.model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 100, output_tokens: 0 } } });
+    event("content_block_start", { index: 0, content_block: { type: "text", text: "" } });
+    event("content_block_delta", { index: 0, delta: { type: "text_delta", text: "An invented title" } });
+    event("content_block_stop", { index: 0 });
+    event("message_delta", { delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 3 } });
+    event("message_stop", {});
+    res.end();
+  });
+  await new Promise<void>(done => server.listen(0, "127.0.0.1", done));
+  process.env.CMX_KEY_INVENTED = "stand-in";
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true }), () => new Promise<void>(done => server.close(() => done())), () => { delete process.env.CMX_KEY_INVENTED; });
+  writeFileSync(join(dir, "models.json"), JSON.stringify({ providers: { "invented-anthropic": {
+    baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, api: "anthropic-messages", apiKey: "${CMX_KEY_INVENTED}",
+    models: [{ id: "budget-thinking", name: "Invented budget-thinking model", reasoning: true, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 200_000, maxTokens: 32_768 }],
+  } } }));
+  const registry = new ModelRegistry(await ModelRuntime.create({ authPath: join(dir, "auth.json"), modelsPath: join(dir, "models.json"), refreshOnCreate: false, allowModelNetwork: false }));
+  await registry.refresh();
+  return { dir, seen, registry, physical: registry.find("invented-anthropic", "budget-thinking")! };
+}
+
+// pi 1.4.0 offers an extension no public way to route a virtual model and then bound the request: the router's thinking applies there,
+// and pi adds its budget to the 128, as the seller configured their router to.
+it("asks a physical model at most 128 output tokens and no thinking, and lets a virtual model's router set its thinking, as pi applies it", async () => {
+  const { dir, seen, registry, physical } = await anthropicRig();
+  const session = SessionManager.inMemory(dir);
+  let picked: "off" | "high" = "off";
+  registry.registerVirtualModel({ provider: "invented-router", id: "auto", name: "Invented Auto", route: () => ({ model: physical, thinkingLevel: picked }) });
+  const routed = registry.find("invented-router", "auto")!;
+  const direct = await titler({ sessionManager: session, modelRegistry: registry, model: physical })({ messages: ["An invented message"] });
+  const off = await titler({ sessionManager: session, modelRegistry: registry, model: routed })({ messages: ["An invented message"] });
+  picked = "high";
+  const high = await titler({ sessionManager: session, modelRegistry: registry, model: routed })({ messages: ["An invented message"] });
+  expect([direct, off, high]).toEqual([{ text: "An invented title" }, { text: "An invented title" }, { text: "An invented title" }]);
+  expect(seen.map(body => [body.max_tokens, body.thinking?.type ?? "none"])).toEqual([[128, "none"], [128, "disabled"], [16_512, "enabled"]]);
 });
 
 it("writes no title where pi holds no key for the session's model, asking it nothing and no other model instead, and stops there", async () => {

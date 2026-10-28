@@ -5,6 +5,8 @@ import { TITLE_SYSTEM, titlePrompt, type TitleRequest } from "../core/titling.js
 
 /** Jev as pi's catalogue names it. Where it is and with which key is pi's provider configuration, so this package holds neither. */
 export const JEV = Object.freeze({ provider: "typesafe", model: "jev-latest" });
+/** The API pi lists a virtual model under: a selection pi routes to a physical model of the router's choosing at each request. */
+const VIRTUAL = "pi-virtual";
 /** How long one call is given, as cx-jev-tidy gives its own. */
 export const CALL_MS = 20_000;
 
@@ -14,7 +16,7 @@ export type Verdict = { readonly decision: "continue"; readonly stale: boolean }
 /** What the judge reads of pi: the branch and its labels, any entry by id, the classifier, and the model the seller is chatting on. */
 export type JudgeContext = {
   readonly sessionManager: { getBranch(): SessionEntry[]; getEntry(id: string): SessionEntry | undefined; getLabel(id: string): string | undefined };
-  readonly modelRegistry: Pick<ModelRegistry, "findOfType" | "classify" | "streamSimple">;
+  readonly modelRegistry: Pick<ModelRegistry, "findOfType" | "classify" | "complete" | "streamSimple">;
   readonly model: Parameters<ModelRegistry["streamSimple"]>[0] | undefined;
 };
 
@@ -90,20 +92,20 @@ export const asker = (ctx: JudgeContext): RoutingAsker => async (state, question
 export type Titled = { readonly text: string } | { readonly failure: AnswerFailure };
 
 /**
- * A title from the model the seller is chatting on, read from pi at the call, so a model switched since the last title writes the next;
- * through pi's own nested call for whatever the seller can select, which routes a virtual model to the model it picks before the request
- * (`streamSimple`; `complete` refuses one), within `ROUTING_LIMITS.titleMs` and on no other signal, as Jev's call; only an answer pi
- * ends with `stop` is one. Anything else is a failure read as Jev's is (`failureOf`): a refusal, among them a model pi holds no key or sign-in for, a
+ * A title from the model the seller is chatting on, read from pi at the call, so a model switched since the last title writes the next,
+ * through pi's own nested call, within `ROUTING_LIMITS.titleMs` and on no other signal, as Jev's call; only an answer pi ends with `stop`
+ * is one. A physical model is asked with at most `titleTokens` and no thinking (`complete`). A virtual model, which `complete` refuses,
+ * goes through `streamSimple`, the path pi routes it on, with the same options; there the thinking level the seller's router returns
+ * applies, and pi adds its budget to the output tokens, since pi offers an extension no public way to route and then bound the request. Anything else is a failure read as Jev's is (`failureOf`): a refusal, among them a model pi holds no key or sign-in for, a
  * timeout, a cut answer, no model chosen. The package has no model of its own to fall back on.
  */
 export const titler = (ctx: JudgeContext) => async (request: TitleRequest): Promise<Titled> => {
   const model = ctx.model;
   if (model === undefined) return { failure: "no-model" };
   try {
-    const answer = await ctx.modelRegistry.streamSimple(model, {
-      systemPrompt: TITLE_SYSTEM,
-      messages: [{ role: "user", content: [{ type: "text", text: titlePrompt(request) }], timestamp: Date.now() }],
-    }, { maxTokens: ROUTING_LIMITS.titleTokens, signal: AbortSignal.timeout(ROUTING_LIMITS.titleMs), cacheRetention: "none" }).result();
+    const context = { systemPrompt: TITLE_SYSTEM, messages: [{ role: "user" as const, content: [{ type: "text" as const, text: titlePrompt(request) }], timestamp: Date.now() }] };
+    const options = { maxTokens: ROUTING_LIMITS.titleTokens, signal: AbortSignal.timeout(ROUTING_LIMITS.titleMs), cacheRetention: "none" as const };
+    const answer = model.api === VIRTUAL ? await ctx.modelRegistry.streamSimple(model, context, options).result() : await ctx.modelRegistry.complete(model, context, options);
     if (answer.stopReason !== "stop") return { failure: failureOf(answer as unknown as Record<string, unknown>) };
     return { text: answer.content.flatMap(block => (block.type === "text" ? [block.text] : [])).join(" ") };
   } catch {

@@ -88,7 +88,7 @@ it("titles through pi's own nested call on the model the seller is chatting on, 
   const timeout = vi.spyOn(AbortSignal, "timeout");
   const one = context(conversation(), continuing, { ...LABELS }, ["Walmart reorder point", "Walmart stock"]);
   expect(await titler(one.ctx)({ title: "Walmart inventory", messages: ["a", "b"] })).toEqual({ text: "Walmart reorder point" });
-  expect(one.raw.modelRegistry.streamSimple.mock.calls[0]![0]).toBe(one.model);
+  expect(one.raw.modelRegistry.complete.mock.calls[0]![0]).toBe(one.model);
   expect(one.titled[0]!.context).toEqual({ systemPrompt: TITLE_SYSTEM, messages: [{ role: "user", content: [{ type: "text", text: titlePrompt({ title: "Walmart inventory", messages: ["a", "b"] }) }], timestamp: expect.any(Number) }] });
   expect(Object.keys(one.titled[0]!.options).sort()).toEqual(["cacheRetention", "maxTokens", "signal"]);
   expect(one.titled[0]!.options).toMatchObject({ maxTokens: 128, cacheRetention: "none" });
@@ -99,7 +99,7 @@ it("titles through pi's own nested call on the model the seller is chatting on, 
   const switched = { id: "invented-other-model", provider: "invented-other-provider" };
   one.raw.model = switched;
   expect(await titler(one.ctx)({ messages: ["c"] })).toEqual({ text: "Walmart stock" });
-  expect(one.raw.modelRegistry.streamSimple.mock.calls[1]![0]).toBe(switched);
+  expect(one.raw.modelRegistry.complete.mock.calls[1]![0]).toBe(switched);
   // Only an answer pi ends with `stop` is a title: a refusal, a timeout, a cut answer or a throw gives none, and says why.
   for (const [failed, failure] of [
     [async () => ({ role: "assistant", stopReason: "error", errorMessage: "403 membership_required", content: [{ type: "text", text: "Refused" }] }), "refused"],
@@ -114,7 +114,19 @@ it("titles through pi's own nested call on the model the seller is chatting on, 
   const none = context(conversation(), continuing);
   none.raw.model = undefined;
   expect(await titler(none.ctx)({ messages: ["a"] })).toEqual({ failure: "no-model" });
-  expect(none.raw.modelRegistry.streamSimple).not.toHaveBeenCalled();
+  expect(none.raw.modelRegistry.complete).not.toHaveBeenCalled();
+});
+
+it("titles on a physical model through pi's bounded call, and on a virtual one through the call pi routes it on, with the same options", async () => {
+  const one = context(conversation(), continuing, { ...LABELS }, ["Walmart reorder point", "Walmart stock"]);
+  expect(await titler(one.ctx)({ messages: ["a"] })).toEqual({ text: "Walmart reorder point" });
+  one.raw.model = { id: "auto", provider: "invented-router", api: "pi-virtual" } as typeof one.raw.model;
+  expect(await titler(one.ctx)({ messages: ["b"] })).toEqual({ text: "Walmart stock" });
+  expect([one.raw.modelRegistry.complete.mock.calls.length, one.raw.modelRegistry.streamSimple.mock.calls.length]).toEqual([1, 1]);
+  expect(one.raw.modelRegistry.streamSimple.mock.calls[0]![0]).toBe(one.raw.model);
+  const { signal: first, ...bounds } = one.titled[0]!.options;
+  const { signal: second, ...same } = one.titled[1]!.options;
+  expect([same, second instanceof AbortSignal, first instanceof AbortSignal]).toEqual([bounds, true, true]);
 });
 
 it("asks Jev once for a seller message under a title, with nothing but a title and the seller's words in the state, and titles new work from its words", async () => {
