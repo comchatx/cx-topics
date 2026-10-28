@@ -2,9 +2,8 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { TITLE_MODEL } from "../../src/extensions/judge.js";
 import { CALIBRATION_CASES, type CalibrationCase } from "./calibration-cases.js";
-import { keysIn, LIVE, modelsFor, registryFor, replay, sheet } from "./replay.js";
+import { CALIBRATED, keysIn, LIVE, modelsFor, registryFor, replay, replayCase, sheet, type Chat } from "./replay.js";
 import { byWords, standIn, type Scripted } from "./replay-stand-in.js";
 
 const IMAGE = JSON.parse(readFileSync("test/fixtures/image-models.json", "utf8"));
@@ -12,14 +11,14 @@ const cleanups: (() => unknown)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 
 /** pi's own registry on a stand-in, in a directory of the test's own, with the keys pi reads by name set to nothing real. */
-async function rig(options: Parameters<typeof standIn>[0] = {}) {
+async function rig(options: Parameters<typeof standIn>[0] = {}, image = IMAGE, chat: readonly Chat[] = [CALIBRATED]) {
   const dir = mkdtempSync(join(tmpdir(), "topics-replay-test-"));
   const listener = await standIn(options);
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }), listener.close);
   process.env.CMX_KEY_TYPESAFE = "stand-in";
   process.env.CMX_KEY_OPENROUTER = "stand-in";
   cleanups.push(() => { delete process.env.CMX_KEY_TYPESAFE; delete process.env.CMX_KEY_OPENROUTER; });
-  return { dir, listener, registry: await registryFor(IMAGE, listener.upstreams, dir) };
+  return { dir, listener, registry: await registryFor(image, listener.upstreams, dir, chat) };
 }
 
 const CASE: CalibrationCase = {
@@ -57,6 +56,37 @@ it("replays a case through the package's judging on pi's registry, keeping each 
   // Jev is shown the seller's words alone: cx's reply after each message reaches no request.
   expect(JSON.stringify(listener.seen)).not.toContain("cx's reply");
   expect(sheet({ cases })).toMatch(/\| 3 \| And for Canada\? \| new \| New topic: t \(1\) \| 0\.10 \/ 0\.90 \/ 0\.60 \| 0\.50 \/ 0\.50 \| continue \| — \| FAIL \|[\s\S]*All cases: 1 failures; 0 titles in another language/);
+});
+
+/** The model each title request the stand-in was sent names. */
+const titledOn = (seen: readonly { readonly path: string; readonly body: unknown }[]) =>
+  seen.filter(one => one.path.endsWith("/chat/completions")).map(one => (one.body as { readonly model: string }).model);
+
+it("titles on the model the session is on, the request to it naming that model", async () => {
+  const { dir, registry, listener } = await rig();
+  const { cases } = await replay(registry, [CASE], 2, dir);
+  expect(titledOn(listener.seen)).toEqual([CALIBRATED.model, CALIBRATED.model]);
+  expect(cases[0]!.messages.flatMap(m => m.calls.filter(call => call.kind === "title").map(call => call.model))).toEqual(["balance/minimax/minimax-m3", "balance/minimax/minimax-m3"]);
+});
+
+it("titles a message on the model the seller switched to since the last title", async () => {
+  const other: Chat = { provider: "balance", model: "invented/other-chat-model" };
+  const image = structuredClone(IMAGE);
+  image.providers.balance.models.push({ ...image.providers.balance.models[0], id: other.model, name: "Invented other chat model" });
+  const { dir, registry, listener } = await rig({}, image, [CALIBRATED, other]);
+  const record = await replayCase(registry, CASE, { spent: 0, limit: 2 }, dir, at => (at < 2 ? CALIBRATED : other));
+  expect(record.messages.map(m => m.titled?.title)).toEqual(["Plan the inv", undefined, "New topic: t", undefined, undefined]);
+  expect(titledOn(listener.seen)).toEqual([CALIBRATED.model, other.model]);
+  expect(record.messages.map(m => m.calls.find(call => call.kind === "title")?.model)).toEqual([`balance/${CALIBRATED.model}`, undefined, `balance/${other.model}`, undefined, undefined]);
+});
+
+it("writes no title where pi holds no key for the session's model, asking it nothing and no other model instead, and stops there", async () => {
+  const { dir, registry, listener } = await rig();
+  delete process.env.CMX_KEY_OPENROUTER;
+  const record = await replayCase(registry, { ...CASE, messages: CASE.messages.slice(0, 1) }, { spent: 0, limit: 2 }, dir);
+  expect(record.messages[0]).toMatchObject({ verdict: "first", stopped: true, calls: [{ kind: "title", model: `balance/${CALIBRATED.model}`, failure: expect.stringMatching(/^error: /) }] });
+  expect(record.messages[0]!.titled).toBeUndefined();
+  expect(listener.seen).toEqual([]);
 });
 
 it("marks a title written in another language than the message it was written on", async () => {
@@ -119,8 +149,8 @@ it("stops before the message after its budget is spent, recording the cases done
   expect(sheet(result)).toMatch(/Stopped by the budget at second/);
 });
 
-it("sends the image's own entries to the upstreams on the keys pi reads by name, the title model's alone kept", () => {
-  const models = modelsFor(IMAGE, LIVE, TITLE_MODEL);
+it("sends the image's own entries to the upstreams on the keys pi reads by name, the session's model alone kept", () => {
+  const models = modelsFor(IMAGE, LIVE, [CALIBRATED]);
   expect(Object.keys(models.providers)).toEqual(["typesafe", "balance"]);
   expect(models.providers.typesafe).toMatchObject({ baseUrl: "https://api.typesafe.ai/v1", apiKey: "${CMX_KEY_TYPESAFE}" });
   expect(models.providers.balance).toMatchObject({ baseUrl: "https://openrouter.ai/api/v1", apiKey: "${CMX_KEY_OPENROUTER}", aggregator: IMAGE.providers.balance.aggregator, modelOverrides: IMAGE.providers.balance.modelOverrides });

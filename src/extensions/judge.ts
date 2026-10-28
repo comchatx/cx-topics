@@ -5,21 +5,17 @@ import { TITLE_SYSTEM, titlePrompt, type TitleRequest } from "../core/titling.js
 
 /** Jev as pi's catalogue names it. Where it is and with which key is pi's provider configuration, so this package holds neither. */
 export const JEV = Object.freeze({ provider: "typesafe", model: "jev-latest" });
-/**
- * The platform's default model, which writes the titles, as pi's catalogue names it. Named here rather than read from pi's settings, where
- * a seller's pick of chat model replaces it in a box; the image's own default is held to it by a test.
- */
-export const TITLE_MODEL = Object.freeze({ provider: "balance", model: "minimax/minimax-m3" });
 /** How long one call is given, as cx-jev-tidy gives its own. */
 export const CALL_MS = 20_000;
 
 /** Jev's verdict on one seller message: it continues the topic in progress, its title still naming the work or no longer, or starts new work. */
 export type Verdict = { readonly decision: "continue"; readonly stale: boolean } | { readonly decision: "new" };
 
-/** What the judge reads of pi: the branch and its labels, any entry by id, and the classifier and the title model. */
+/** What the judge reads of pi: the branch and its labels, any entry by id, the classifier, and the model the seller is chatting on. */
 export type JudgeContext = {
   readonly sessionManager: { getBranch(): SessionEntry[]; getEntry(id: string): SessionEntry | undefined; getLabel(id: string): string | undefined };
-  readonly modelRegistry: Pick<ModelRegistry, "findOfType" | "classify" | "find" | "complete">;
+  readonly modelRegistry: Pick<ModelRegistry, "findOfType" | "classify" | "complete">;
+  readonly model: Parameters<ModelRegistry["complete"]>[0] | undefined;
 };
 
 type Said = Extract<SessionEntry, { type: "message" }>;
@@ -94,12 +90,13 @@ export const asker = (ctx: JudgeContext): RoutingAsker => async (state, question
 export type Titled = { readonly text: string } | { readonly failure: AnswerFailure };
 
 /**
- * A title from the platform's default model, through pi's own nested call, within `ROUTING_LIMITS.titleMs` and on no other signal, as
- * Jev's call; only an answer pi ends with `stop` is one. Anything else is a failure read as Jev's is (`failureOf`): a refusal, a timeout,
- * a cut answer, no such model in pi.
+ * A title from the model the seller is chatting on, read from pi at the call, so a model switched since the last title writes the next;
+ * through pi's own nested call, within `ROUTING_LIMITS.titleMs` and on no other signal, as Jev's call; only an answer pi ends with `stop`
+ * is one. Anything else is a failure read as Jev's is (`failureOf`): a refusal, among them a model pi holds no key or sign-in for, a
+ * timeout, a cut answer, no model chosen. The package has no model of its own to fall back on.
  */
 export const titler = (ctx: JudgeContext) => async (request: TitleRequest): Promise<Titled> => {
-  const model = ctx.modelRegistry.find(TITLE_MODEL.provider, TITLE_MODEL.model);
+  const model = ctx.model;
   if (model === undefined) return { failure: "no-model" };
   try {
     const answer = await ctx.modelRegistry.complete(model, {
@@ -121,8 +118,8 @@ export type Outcome = "judged" | "stopped";
 const ended = (failure: AnswerFailure | undefined): Outcome => (failure !== undefined && STOPPING.has(failure) ? "stopped" : "judged");
 
 /**
- * The judgment of one seller message, against the titles those before it wrote. Before the first title, and on new work, the platform's
- * default model titles the message; on a continuation whose title Jev judged no longer names the work, it rewrites the title on the
+ * The judgment of one seller message, against the titles those before it wrote. Before the first title, and on new work, the seller's
+ * model titles the message; on a continuation whose title Jev judged no longer names the work, it rewrites the title on the
  * topic's first message. `title` keeps what it writes as a title is kept; `setLabel` writes it. `live` throws once the judgment's pass is
  * over, so a Jev answer that lands after it buys no title call.
  */

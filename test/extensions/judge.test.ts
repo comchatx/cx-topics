@@ -4,7 +4,7 @@ import { routeTopic, ROUTING_LIMITS, type RoutingAdvisory } from "../../src/core
 import { TITLE_SYSTEM, titlePrompt } from "../../src/core/titling.js";
 import { holdsSymbol } from "../support/disclosure.js";
 import { answered, context, continuing, conversation, LABELS, others, said, separate, stale, type Asked, type Titled } from "../support/session-fixtures.js";
-import { asker, createJudge, JEV, projection, TITLE_MODEL, titler, topicBefore, verdictOf } from "../../src/extensions/judge.js";
+import { asker, createJudge, JEV, projection, titler, topicBefore, verdictOf } from "../../src/extensions/judge.js";
 import { title } from "../../src/extensions/topics.js";
 
 afterEach(() => vi.useRealTimers());
@@ -84,13 +84,10 @@ it("asks pi's classifier for Jev with no retry and the call's own deadline alone
   expect(none.raw.modelRegistry.classify).not.toHaveBeenCalled();
 });
 
-it("titles through pi's own nested call on the platform's default model, within 20,000 ms and 128 tokens, on no signal of the run's", async () => {
-  // The image's default model; the product's own test holds this pair to its `DEFAULT_MODEL`.
-  expect(TITLE_MODEL).toEqual({ provider: "balance", model: "minimax/minimax-m3" });
+it("titles through pi's own nested call on the model the seller is chatting on, within 20,000 ms and 128 tokens, on no signal of the run's", async () => {
   const timeout = vi.spyOn(AbortSignal, "timeout");
-  const one = context(conversation(), continuing, { ...LABELS }, ["Walmart reorder point"]);
+  const one = context(conversation(), continuing, { ...LABELS }, ["Walmart reorder point", "Walmart stock"]);
   expect(await titler(one.ctx)({ title: "Walmart inventory", messages: ["a", "b"] })).toEqual({ text: "Walmart reorder point" });
-  expect(one.raw.modelRegistry.find).toHaveBeenCalledWith("balance", "minimax/minimax-m3");
   expect(one.raw.modelRegistry.complete.mock.calls[0]![0]).toBe(one.model);
   expect(one.titled[0]!.context).toEqual({ systemPrompt: TITLE_SYSTEM, messages: [{ role: "user", content: [{ type: "text", text: titlePrompt({ title: "Walmart inventory", messages: ["a", "b"] }) }], timestamp: expect.any(Number) }] });
   expect(Object.keys(one.titled[0]!.options).sort()).toEqual(["cacheRetention", "maxTokens", "signal"]);
@@ -98,6 +95,11 @@ it("titles through pi's own nested call on the platform's default model, within 
   expect(timeout).toHaveBeenCalledWith(20_000);
   expect(one.titled[0]!.options["signal"]).toBe(timeout.mock.results[0]!.value);
   timeout.mockRestore();
+  // The model is read at each call: the seller's switch since the last title writes the next.
+  const switched = { id: "invented-other-model", provider: "invented-other-provider" };
+  one.raw.model = switched;
+  expect(await titler(one.ctx)({ messages: ["c"] })).toEqual({ text: "Walmart stock" });
+  expect(one.raw.modelRegistry.complete.mock.calls[1]![0]).toBe(switched);
   // Only an answer pi ends with `stop` is a title: a refusal, a timeout, a cut answer or a throw gives none, and says why.
   for (const [failed, failure] of [
     [async () => ({ role: "assistant", stopReason: "error", errorMessage: "403 membership_required", content: [{ type: "text", text: "Refused" }] }), "refused"],
@@ -108,8 +110,9 @@ it("titles through pi's own nested call on the platform's default model, within 
     one.titleWith(failed);
     expect(await titler(one.ctx)({ messages: ["a"] })).toEqual({ failure });
   }
+  // No model chosen: no title, and no model of the package's own asked instead.
   const none = context(conversation(), continuing);
-  none.raw.modelRegistry.find.mockReturnValue(undefined as never);
+  none.raw.model = undefined;
   expect(await titler(none.ctx)({ messages: ["a"] })).toEqual({ failure: "no-model" });
   expect(none.raw.modelRegistry.complete).not.toHaveBeenCalled();
 });
@@ -241,7 +244,7 @@ it("reads the title call's failures as Jev's, by the status at the head of pi's 
   thrown.titleWith(async () => { throw new Error("invented failure"); });
   expect(await judging(thrown.labels).judge(thrown.ctx, "u3")).toBe("stopped");
   const none = context([said("u1", "Analyse the invented BE3600 positioning.")], separate, {});
-  none.raw.modelRegistry.find.mockReturnValue(undefined as never);
+  none.raw.model = undefined;
   expect(await judging(none.labels).judge(none.ctx, "u1")).toBe("stopped");
 });
 

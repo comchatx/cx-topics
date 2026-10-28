@@ -33,7 +33,10 @@
       "line": "hash"
     },
     "section": "extensions",
-    "order": 100
+    "order": 100,
+    "builds": [
+      "jev"
+    ]
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"

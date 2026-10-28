@@ -160,6 +160,6 @@ export default function topics(pi: ExtensionAPI): void {
 }
 
 // What a box's other parts hold this package to, read from the built module: the installs file and key the pass is checked against, and
-// the two models it asks.
+// Jev, the one model it names.
 export { INSTALLS_FILE, installKey } from "./pass.js";
-export { JEV, TITLE_MODEL } from "./judge.js";
+export { JEV } from "./judge.js";
