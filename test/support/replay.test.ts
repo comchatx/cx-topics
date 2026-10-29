@@ -1,10 +1,13 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ModelRegistry, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, expect, it } from "vitest";
-import { TITLE_MODEL } from "../../src/extensions/judge.js";
+import { titler } from "../../src/extensions/judge.js";
 import { CALIBRATION_CASES, type CalibrationCase } from "./calibration-cases.js";
-import { keysIn, LIVE, modelsFor, registryFor, replay, sheet } from "./replay.js";
+import { CALIBRATED, keysIn, LIVE, modelsFor, registryFor, replay, replayCase, sheet, type Chat } from "./replay.js";
 import { byWords, standIn, type Scripted } from "./replay-stand-in.js";
 
 const IMAGE = JSON.parse(readFileSync("test/fixtures/image-models.json", "utf8"));
@@ -12,14 +15,14 @@ const cleanups: (() => unknown)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 
 /** pi's own registry on a stand-in, in a directory of the test's own, with the keys pi reads by name set to nothing real. */
-async function rig(options: Parameters<typeof standIn>[0] = {}) {
+async function rig(options: Parameters<typeof standIn>[0] = {}, image = IMAGE, chat: readonly Chat[] = [CALIBRATED]) {
   const dir = mkdtempSync(join(tmpdir(), "topics-replay-test-"));
   const listener = await standIn(options);
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }), listener.close);
   process.env.CMX_KEY_TYPESAFE = "stand-in";
   process.env.CMX_KEY_OPENROUTER = "stand-in";
   cleanups.push(() => { delete process.env.CMX_KEY_TYPESAFE; delete process.env.CMX_KEY_OPENROUTER; });
-  return { dir, listener, registry: await registryFor(IMAGE, listener.upstreams, dir) };
+  return { dir, listener, registry: await registryFor(image, listener.upstreams, dir, chat) };
 }
 
 const CASE: CalibrationCase = {
@@ -57,6 +60,101 @@ it("replays a case through the package's judging on pi's registry, keeping each 
   // Jev is shown the seller's words alone: cx's reply after each message reaches no request.
   expect(JSON.stringify(listener.seen)).not.toContain("cx's reply");
   expect(sheet({ cases })).toMatch(/\| 3 \| And for Canada\? \| new \| New topic: t \(1\) \| 0\.10 \/ 0\.90 \/ 0\.60 \| 0\.50 \/ 0\.50 \| continue \| — \| FAIL \|[\s\S]*All cases: 1 failures; 0 titles in another language/);
+});
+
+/** The model each title request the stand-in was sent names. */
+const titledOn = (seen: readonly { readonly path: string; readonly body: unknown }[]) =>
+  seen.filter(one => one.path.endsWith("/chat/completions")).map(one => (one.body as { readonly model: string }).model);
+
+it("titles on the model the session is on, the request to it naming that model", async () => {
+  const { dir, registry, listener } = await rig();
+  const { cases } = await replay(registry, [CASE], 2, dir);
+  expect(titledOn(listener.seen)).toEqual([CALIBRATED.model, CALIBRATED.model]);
+  expect(cases[0]!.messages.flatMap(m => m.calls.filter(call => call.kind === "title").map(call => call.model))).toEqual(["balance/minimax/minimax-m3", "balance/minimax/minimax-m3"]);
+});
+
+it("titles a message on the model the seller switched to since the last title", async () => {
+  const other: Chat = { provider: "balance", model: "invented/other-chat-model" };
+  const image = structuredClone(IMAGE);
+  image.providers.balance.models.push({ ...image.providers.balance.models[0], id: other.model, name: "Invented other chat model" });
+  const { dir, registry, listener } = await rig({}, image, [CALIBRATED, other]);
+  const record = await replayCase(registry, CASE, { spent: 0, limit: 2 }, dir, at => (at < 2 ? CALIBRATED : other));
+  expect(record.messages.map(m => m.titled?.title)).toEqual(["Plan the inv", undefined, "New topic: t", undefined, undefined]);
+  expect(titledOn(listener.seen)).toEqual([CALIBRATED.model, other.model]);
+  expect(record.messages.map(m => m.calls.find(call => call.kind === "title")?.model)).toEqual([`balance/${CALIBRATED.model}`, undefined, `balance/${other.model}`, undefined, undefined]);
+});
+
+it("titles on a virtual model the seller selected, routed by pi to its physical model: one request, to that model", async () => {
+  const { dir, registry, listener } = await rig();
+  // pi routes only to a model whose provider it has seen credentials for, which a refresh records.
+  await registry.refresh();
+  const physical = registry.find(CALIBRATED.provider, CALIBRATED.model)!;
+  let routes = 0;
+  registry.registerVirtualModel({ provider: "invented-router", id: "auto", name: "Invented Auto", route: () => { routes += 1; return { model: physical, thinkingLevel: "off" }; } });
+  const record = await replayCase(registry, { ...CASE, messages: CASE.messages.slice(0, 1) }, { spent: 0, limit: 2 }, dir, () => ({ provider: "invented-router", model: "auto" }));
+  expect(record.messages[0]).toMatchObject({ verdict: "first", stopped: false, titled: { title: "Plan the inv", on: 0 }, calls: [{ kind: "title", model: "invented-router/auto" }] });
+  expect(record.messages[0]!.calls[0]!.failure).toBeUndefined();
+  expect([routes, titledOn(listener.seen)]).toEqual([1, [CALIBRATED.model]]);
+});
+
+/**
+ * A loopback listener in an Anthropic Messages provider's place, answering every request with one short title, and pi's own registry
+ * on it with one model that thinks on a budget, as Anthropic's do: where a thinking level reaches its adapter, pi adds that level's
+ * budget to the request's output tokens.
+ */
+async function anthropicRig() {
+  const dir = mkdtempSync(join(tmpdir(), "topics-bound-test-"));
+  const seen: { readonly max_tokens?: number; readonly thinking?: { readonly type: string } }[] = [];
+  const server = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk as Uint8Array));
+    const body = JSON.parse(Buffer.concat(chunks).toString());
+    seen.push(body);
+    const event = (type: string, data: object) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    event("message_start", { message: { id: "m", type: "message", role: "assistant", model: body.model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 100, output_tokens: 0 } } });
+    event("content_block_start", { index: 0, content_block: { type: "text", text: "" } });
+    event("content_block_delta", { index: 0, delta: { type: "text_delta", text: "An invented title" } });
+    event("content_block_stop", { index: 0 });
+    event("message_delta", { delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 3 } });
+    event("message_stop", {});
+    res.end();
+  });
+  await new Promise<void>(done => server.listen(0, "127.0.0.1", done));
+  process.env.CMX_KEY_INVENTED = "stand-in";
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true }), () => new Promise<void>(done => server.close(() => done())), () => { delete process.env.CMX_KEY_INVENTED; });
+  writeFileSync(join(dir, "models.json"), JSON.stringify({ providers: { "invented-anthropic": {
+    baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, api: "anthropic-messages", apiKey: "${CMX_KEY_INVENTED}",
+    models: [{ id: "budget-thinking", name: "Invented budget-thinking model", reasoning: true, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 200_000, maxTokens: 32_768 }],
+  } } }));
+  const registry = new ModelRegistry(await ModelRuntime.create({ authPath: join(dir, "auth.json"), modelsPath: join(dir, "models.json"), refreshOnCreate: false, allowModelNetwork: false }));
+  await registry.refresh();
+  return { dir, seen, registry, physical: registry.find("invented-anthropic", "budget-thinking")! };
+}
+
+// pi 1.4.0 offers an extension no public way to route a virtual model and then bound the request: the router's thinking applies there,
+// and pi adds its budget to the 128, as the seller configured their router to.
+it("asks a physical model at most 128 output tokens and no thinking, and lets a virtual model's router set its thinking, as pi applies it", async () => {
+  const { dir, seen, registry, physical } = await anthropicRig();
+  const session = SessionManager.inMemory(dir);
+  let picked: "off" | "high" = "off";
+  registry.registerVirtualModel({ provider: "invented-router", id: "auto", name: "Invented Auto", route: () => ({ model: physical, thinkingLevel: picked }) });
+  const routed = registry.find("invented-router", "auto")!;
+  const direct = await titler({ sessionManager: session, modelRegistry: registry, model: physical })({ messages: ["An invented message"] });
+  const off = await titler({ sessionManager: session, modelRegistry: registry, model: routed })({ messages: ["An invented message"] });
+  picked = "high";
+  const high = await titler({ sessionManager: session, modelRegistry: registry, model: routed })({ messages: ["An invented message"] });
+  expect([direct, off, high]).toEqual([{ text: "An invented title" }, { text: "An invented title" }, { text: "An invented title" }]);
+  expect(seen.map(body => [body.max_tokens, body.thinking?.type ?? "none"])).toEqual([[128, "none"], [128, "disabled"], [16_512, "enabled"]]);
+});
+
+it("writes no title where pi holds no key for the session's model, asking it nothing and no other model instead, and stops there", async () => {
+  const { dir, registry, listener } = await rig();
+  delete process.env.CMX_KEY_OPENROUTER;
+  const record = await replayCase(registry, { ...CASE, messages: CASE.messages.slice(0, 1) }, { spent: 0, limit: 2 }, dir);
+  expect(record.messages[0]).toMatchObject({ verdict: "first", stopped: true, calls: [{ kind: "title", model: `balance/${CALIBRATED.model}`, failure: expect.stringMatching(/^error: /) }] });
+  expect(record.messages[0]!.titled).toBeUndefined();
+  expect(listener.seen).toEqual([]);
 });
 
 it("marks a title written in another language than the message it was written on", async () => {
@@ -119,8 +217,8 @@ it("stops before the message after its budget is spent, recording the cases done
   expect(sheet(result)).toMatch(/Stopped by the budget at second/);
 });
 
-it("sends the image's own entries to the upstreams on the keys pi reads by name, the title model's alone kept", () => {
-  const models = modelsFor(IMAGE, LIVE, TITLE_MODEL);
+it("sends the image's own entries to the upstreams on the keys pi reads by name, the session's model alone kept", () => {
+  const models = modelsFor(IMAGE, LIVE, [CALIBRATED]);
   expect(Object.keys(models.providers)).toEqual(["typesafe", "balance"]);
   expect(models.providers.typesafe).toMatchObject({ baseUrl: "https://api.typesafe.ai/v1", apiKey: "${CMX_KEY_TYPESAFE}" });
   expect(models.providers.balance).toMatchObject({ baseUrl: "https://openrouter.ai/api/v1", apiKey: "${CMX_KEY_OPENROUTER}", aggregator: IMAGE.providers.balance.aggregator, modelOverrides: IMAGE.providers.balance.modelOverrides });

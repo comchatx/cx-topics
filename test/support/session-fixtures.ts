@@ -1,6 +1,6 @@
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { vi } from "vitest";
-import { JEV, TITLE_MODEL } from "../../src/extensions/judge.js";
+import { JEV } from "../../src/extensions/judge.js";
 import type { PassContext } from "../../src/extensions/pass.js";
 
 let clock = 0;
@@ -30,14 +30,14 @@ export const LABELS: Readonly<Record<string, string>> = { u1: "BE3600 analysis",
 export type Asked = { readonly state: Record<string, unknown>; readonly questions: Record<string, unknown>; readonly options: Record<string, unknown> };
 export type Titled = { readonly context: { systemPrompt: string; messages: { content: { text: string }[] }[] }; readonly options: Record<string, unknown> };
 /**
- * pi as the judge reads it: the branch and labels, a classifier that answers each question as `answer` says, and a title model that
- * answers with the titles `titles` gives in turn.
+ * pi as the judge reads it: the branch and labels, a classifier that answers each question as `answer` says, and the model the seller
+ * is chatting on, which answers with the titles `titles` gives in turn.
  */
 export function context(entries: SessionEntry[], answer: (question: string) => number, labels: Record<string, string> = { ...LABELS }, titles: string[] = ["Reorder point"]) {
   const asked: Asked[] = [];
   const titled: Titled[] = [];
   const jev = { id: JEV.model, provider: JEV.provider };
-  const model = { id: TITLE_MODEL.model, provider: TITLE_MODEL.provider };
+  const model = { id: "invented-chat-model", provider: "invented-provider" };
   let reply = async (questions: Record<string, unknown>): Promise<unknown> => ({
     api: "typesafe-system-one", provider: "typesafe", model: "jev-latest", stopReason: "stop", timestamp: 1,
     answers: Object.fromEntries(Object.keys(questions).map(key => [key, { type: "bool", probability: answer(key) }])),
@@ -52,12 +52,16 @@ export function context(entries: SessionEntry[], answer: (question: string) => n
         asked.push({ state: request.state, questions: request.questions, options });
         return reply(request.questions);
       }),
-      find: vi.fn((..._args: unknown[]) => model),
       complete: vi.fn(async (_model: unknown, request: Titled["context"], options: Record<string, unknown>) => {
         titled.push({ context: request, options });
         return write();
       }),
+      streamSimple: vi.fn((_model: unknown, request: Titled["context"], options: Record<string, unknown>) => {
+        titled.push({ context: request, options });
+        return { result: write };
+      }),
     },
+    model: model as { readonly id: string; readonly provider: string } | undefined,
   };
   return {
     ctx: ctx as unknown as PassContext, raw: ctx, asked, titled, labels, entries, jev, model,

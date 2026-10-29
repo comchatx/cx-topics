@@ -1,6 +1,6 @@
 {
   "name": "@comchatx/cx-topics",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Names your conversations and retrieves the messages you quote.",
   "license": "MIT",
   "author": "ComChatX",
@@ -33,7 +33,10 @@
       "line": "hash"
     },
     "section": "extensions",
-    "order": 100
+    "order": 100,
+    "builds": [
+      "jev"
+    ]
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"

@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ModelRegistry, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import { continuationBars, routeTopic } from "../../src/core/routing.js";
-import { createJudge, projection, TITLE_MODEL, topicBefore, type JudgeContext } from "../../src/extensions/judge.js";
+import { createJudge, projection, topicBefore, type JudgeContext } from "../../src/extensions/judge.js";
 import { title } from "../../src/extensions/topics.js";
 import type { CalibrationCase, Expected } from "./calibration-cases.js";
 
@@ -11,7 +11,15 @@ const JEV_USD_PER_TOKEN = 0.042 / 1_000_000;
 const MARGIN = 1.3;
 const UNITS_PER_USD = 1_000_000;
 
-export type Call = { readonly kind: "jev" | "title"; readonly inputTokens: number; readonly outputTokens: number; readonly usd: number; readonly units: number; readonly failure?: string };
+/** A model as pi's catalogue names it. */
+export type Chat = { readonly provider: string; readonly model: string };
+/**
+ * The model the calibration set was measured on, the platform's default, which a seller chats on until they pick another: the replay's
+ * session is on it, so the titles it writes are that model's.
+ */
+export const CALIBRATED: Chat = Object.freeze({ provider: "balance", model: "minimax/minimax-m3" });
+
+export type Call = { readonly kind: "jev" | "title"; readonly model: string; readonly inputTokens: number; readonly outputTokens: number; readonly usd: number; readonly units: number; readonly failure?: string };
 export type Answers = { readonly significantChange?: number; readonly continueCurrent?: number; readonly titleAdequate?: number };
 /**
  * Jev's judgment of a message. "continue, rewrite asked" is Jev saying the row's title no longer names its work; whether a new title was
@@ -44,7 +52,7 @@ const chinese = (text: string): boolean => /[\u3400-\u9fff]/.test(text);
 /** Thrown before a message is judged once the budget is spent: the replay stops there. The judge swallows what its calls throw, so the check is not inside them. */
 export class OverBudget extends Error {}
 
-type Registry = Pick<ModelRegistry, "findOfType" | "classify" | "find" | "complete">;
+type Registry = Pick<ModelRegistry, "findOfType" | "classify" | "find" | "complete" | "streamSimple">;
 
 const failureText = (stopReason: string, errorMessage: unknown) => `${stopReason}${typeof errorMessage === "string" ? `: ${errorMessage.slice(0, 200)}` : ""}`;
 
@@ -52,6 +60,12 @@ const failureText = (stopReason: string, errorMessage: unknown) => `${stopReason
 function recording(registry: Registry, budget: { spent: number; readonly limit: number }) {
   const calls: Call[] = [];
   let answered: unknown;
+  const titled = <T extends Awaited<ReturnType<ModelRegistry["complete"]>>>(model: { readonly provider: string; readonly id: string }, answer: T): T => {
+    const usd = answer.usage?.cost?.total ?? 0;
+    budget.spent += usd;
+    calls.push({ kind: "title", model: `${model.provider}/${model.id}`, inputTokens: answer.usage?.input ?? 0, outputTokens: answer.usage?.output ?? 0, usd, units: usd * MARGIN * UNITS_PER_USD, ...(answer.stopReason === "stop" ? {} : { failure: failureText(answer.stopReason, answer.errorMessage) }) });
+    return answer;
+  };
   const wrapped: Registry = {
     findOfType: registry.findOfType.bind(registry),
     find: registry.find.bind(registry),
@@ -61,15 +75,16 @@ function recording(registry: Registry, budget: { spent: number; readonly limit: 
       const input = result.usage?.input ?? 0;
       const usd = input * JEV_USD_PER_TOKEN;
       budget.spent += usd;
-      calls.push({ kind: "jev", inputTokens: input, outputTokens: result.usage?.output ?? 0, usd, units: usd * MARGIN * UNITS_PER_USD, ...(result.stopReason === "stop" ? {} : { failure: failureText(result.stopReason, result.errorMessage) }) });
+      calls.push({ kind: "jev", model: `${model.provider}/${model.id}`, inputTokens: input, outputTokens: result.usage?.output ?? 0, usd, units: usd * MARGIN * UNITS_PER_USD, ...(result.stopReason === "stop" ? {} : { failure: failureText(result.stopReason, result.errorMessage) }) });
       return result;
     },
     async complete(model, context, options) {
-      const answer = await registry.complete(model, context, options);
-      const usd = answer.usage?.cost?.total ?? 0;
-      budget.spent += usd;
-      calls.push({ kind: "title", inputTokens: answer.usage?.input ?? 0, outputTokens: answer.usage?.output ?? 0, usd, units: usd * MARGIN * UNITS_PER_USD, ...(answer.stopReason === "stop" ? {} : { failure: failureText(answer.stopReason, answer.errorMessage) }) });
-      return answer;
+      return titled(model, await registry.complete(model, context, options));
+    },
+    streamSimple(model, context, options) {
+      const stream = registry.streamSimple(model, context, options);
+      const result = stream.result.bind(stream);
+      return Object.assign(stream, { result: async () => titled(model, await result()) });
     },
   };
   return { wrapped, take: () => { const taken = { calls: calls.splice(0), answered }; answered = undefined; return taken; } };
@@ -83,14 +98,16 @@ const REPLY = Object.freeze({
 /**
  * One case through the package's own judging: each seller message appended to an in-memory pi session and judged by `createJudge` on
  * pi's registry, as the pass judges it, with a reply of cx's after it. A judgment that stops is recorded and the next message goes on,
- * where the pass would ask it again later.
+ * where the pass would ask it again later. The session is on the model `chatOn` names for the message being judged, as pi reports the
+ * seller's model at the moment of the call.
  */
-export async function replayCase(registry: Registry, item: CalibrationCase, budget: { spent: number; readonly limit: number }, cwd: string): Promise<CaseRecord> {
+export async function replayCase(registry: Registry, item: CalibrationCase, budget: { spent: number; readonly limit: number }, cwd: string, chatOn: (at: number) => Chat = () => CALIBRATED): Promise<CaseRecord> {
   const session = SessionManager.inMemory(cwd);
   const { wrapped, take } = recording(registry, budget);
   const writes: { id: string; label: string }[] = [];
   const judge = createJudge(title, (id, label) => { writes.push({ id, label }); session.appendLabelChange(id, label); });
-  const ctx: JudgeContext = { sessionManager: session, modelRegistry: wrapped };
+  let judging = 0;
+  const ctx: JudgeContext = { sessionManager: session, modelRegistry: wrapped, get model() { const chat = chatOn(judging); return registry.find(chat.provider, chat.model); } };
   const ids: string[] = [];
   const records: MessageRecord[] = [];
   const labelOf = (id: string) => { const raw = session.getLabel(id); return raw === undefined ? undefined : title(raw); };
@@ -108,6 +125,7 @@ export async function replayCase(registry: Registry, item: CalibrationCase, budg
     const topic = topicBefore(branch, labelOf, id);
     const input = projection(branch, labelOf, id);
     const written = writes.length;
+    judging = at;
     const outcome = await judge(ctx, id);
     const { calls, answered } = take();
     const titled = writes.slice(written).at(-1);
@@ -187,28 +205,29 @@ export function sheet(result: { readonly cases: readonly CaseRecord[]; readonly 
   return lines.join("\n");
 }
 
-/** Where the replay sends Jev's and the title model's calls: TypeSafe and OpenRouter themselves, or a stand-in's loopback. */
+/** Where the replay sends Jev's and the session model's calls: TypeSafe and OpenRouter themselves, or a stand-in's loopback. */
 export type Upstreams = { readonly typesafe: string; readonly openrouter: string };
 export const LIVE: Upstreams = Object.freeze({ typesafe: "https://api.typesafe.ai/v1", openrouter: "https://openrouter.ai/api/v1" });
 
 type ProviderEntry = { baseUrl?: string; apiKey?: string; models?: { id: string; baseUrl?: string }[]; [key: string]: unknown };
 
 /**
- * The image's own `typesafe` entry and the title model's provider entry (`balance`, the platform's OpenRouter), that model's alone kept,
- * sent to `upstreams` on the keys pi reads from the environment by name: the requests are the box's, with no proxy between.
+ * The image's own `typesafe` entry and the provider entry of the models the session chats on (`balance`, the platform's OpenRouter),
+ * those models alone kept, sent to `upstreams` on the keys pi reads from the environment by name: the requests are the box's, with no
+ * proxy between.
  */
-export function modelsFor(image: { readonly providers: Readonly<Record<string, ProviderEntry>> }, upstreams: Upstreams, title: { readonly provider: string; readonly model: string }): { providers: Record<string, ProviderEntry> } {
+export function modelsFor(image: { readonly providers: Readonly<Record<string, ProviderEntry>> }, upstreams: Upstreams, chat: readonly Chat[]): { providers: Record<string, ProviderEntry> } {
   const typesafe = image.providers.typesafe!;
-  const titled = image.providers[title.provider]!;
-  return {
-    providers: {
-      typesafe: { ...typesafe, baseUrl: upstreams.typesafe, apiKey: "${CMX_KEY_TYPESAFE}" },
-      [title.provider]: {
-        ...titled, baseUrl: upstreams.openrouter, apiKey: "${CMX_KEY_OPENROUTER}",
-        models: (titled.models ?? []).filter(model => model.id === title.model).map(model => ({ ...model, baseUrl: upstreams.openrouter })),
-      },
-    },
-  };
+  const providers: Record<string, ProviderEntry> = { typesafe: { ...typesafe, baseUrl: upstreams.typesafe, apiKey: "${CMX_KEY_TYPESAFE}" } };
+  for (const provider of new Set(chat.map(one => one.provider))) {
+    const entry = image.providers[provider]!;
+    const kept = new Set(chat.filter(one => one.provider === provider).map(one => one.model));
+    providers[provider] = {
+      ...entry, baseUrl: upstreams.openrouter, apiKey: "${CMX_KEY_OPENROUTER}",
+      models: (entry.models ?? []).filter(model => kept.has(model.id)).map(model => ({ ...model, baseUrl: upstreams.openrouter })),
+    };
+  }
+  return { providers };
 }
 
 /** The two keys by name from an env file's lines, never any other line, a `Bearer ` before a key dropped since pi writes its own; nothing is echoed. */
@@ -224,8 +243,8 @@ export function keysIn(text: string): { readonly CMX_KEY_TYPESAFE?: string; read
 }
 
 /** pi's registry on `modelsFor`'s entries, written under `dir` with an empty login file there: no file of the machine's is read. */
-export async function registryFor(image: Parameters<typeof modelsFor>[0], upstreams: Upstreams, dir: string): Promise<ModelRegistry> {
+export async function registryFor(image: Parameters<typeof modelsFor>[0], upstreams: Upstreams, dir: string, chat: readonly Chat[] = [CALIBRATED]): Promise<ModelRegistry> {
   const modelsPath = join(dir, "models.json");
-  writeFileSync(modelsPath, JSON.stringify(modelsFor(image, upstreams, TITLE_MODEL)));
+  writeFileSync(modelsPath, JSON.stringify(modelsFor(image, upstreams, chat)));
   return new ModelRegistry(await ModelRuntime.create({ authPath: join(dir, "auth.json"), modelsPath, refreshOnCreate: false, allowModelNetwork: false }));
 }

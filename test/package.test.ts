@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
 import { build } from "../scripts/build.mjs";
 import { INSTALLS_FILE, installKey } from "../src/extensions/pass.js";
-import { JEV, TITLE_MODEL } from "../src/extensions/judge.js";
+import { JEV } from "../src/extensions/judge.js";
 import { loadPackage } from "./pi.js";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -20,11 +20,16 @@ it("the pinned pi loads the one extension from the built dist/, with its tool an
   expect(extensions.map((extension) => [...extension.handlers.keys()].sort())).toEqual([["context", "message_end", "session_shutdown", "session_start"]]);
 });
 
-it("the built module carries what a box holds the package to: the installs file and key, and the two models it asks", async () => {
+it("the built module carries what a box holds the package to: the installs file and key, and Jev, the one model it names", async () => {
   build(ROOT);
   const built = (await import(pathToFileURL(BUILT).href)) as Record<string, unknown>;
-  expect([built["INSTALLS_FILE"], built["JEV"], built["TITLE_MODEL"]]).toEqual([INSTALLS_FILE, JEV, TITLE_MODEL]);
+  expect([built["INSTALLS_FILE"], built["JEV"], "TITLE_MODEL" in built]).toEqual([INSTALLS_FILE, JEV, false]);
   expect((built["installKey"] as typeof installKey)("npm:@comchatx/cx-topics@0.1.3")).toBe(installKey("npm:@comchatx/cx-topics@0.1.3"));
+});
+
+it("says on the Plugins page that it builds on Jev, the card the page draws among the plugins it uses", () => {
+  const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { readonly comchatx: { readonly builds?: unknown } };
+  expect(manifest.comchatx.builds).toEqual(["jev"]);
 });
 
 it("ships the built extension alone", () => {
