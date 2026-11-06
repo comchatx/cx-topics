@@ -1,6 +1,6 @@
 {
   "name": "@comchatx/cx-topics",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Names your conversations and retrieves the messages you quote.",
   "license": "MIT",
   "author": "ComChatX",
@@ -19,7 +19,8 @@
     ]
   },
   "files": [
-    "dist"
+    "dist",
+    "README.zh-CN.md"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",

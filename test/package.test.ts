@@ -32,9 +32,9 @@ it("says on the Plugins page that it builds on Jev, the card the page draws amon
   expect(manifest.comchatx.builds).toEqual(["jev"]);
 });
 
-it("ships the built extension alone", () => {
+it("ships the built extension and its README in English and in Chinese", () => {
   const packed = JSON.parse(execFileSync("npm", ["pack", "--dry-run", "--json"], { cwd: ROOT, encoding: "utf8" })) as { files: { path: string }[] }[];
-  expect(packed[0]!.files.map((file) => file.path).sort()).toEqual(["LICENSE", "README.md", "dist/extensions/topics.js", "package.json"]);
+  expect(packed[0]!.files.map((file) => file.path).sort()).toEqual(["LICENSE", "README.md", "README.zh-CN.md", "dist/extensions/topics.js", "package.json"]);
 });
 
 // Declared as a module, pi loads the bundle natively and `import.meta.url` is the file's real path, while pi lists the tool's source
