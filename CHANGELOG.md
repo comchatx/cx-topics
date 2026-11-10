@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6
+
+- The card's line and the Overview, in English and Chinese, are the words signed on 2026-11-10: "Titles each piece of work, and reads quotes in context." as npm's `description`, and 「每件事都有标题，引用旧消息时 cx 连前后一起读。」 as `comchatx.about`. They said "Names your conversations and retrieves the messages you quote." and 「为对话生成标题，并读取你引用的消息及上下文。」.
+- What only a developer reads moved from the README to `DEVELOPING.md`: the opening description and "The titles", "`quoted`", "The quote marker", "How it is built", "Tests", "Release".
+- `DEVELOPING.md` holds the install line, `pi install npm:@comchatx/cx-topics`.
+
 ## 0.1.5
 
 - The README in Chinese, `README.zh-CN.md`, which the Plugins page draws as the Overview in Chinese.
