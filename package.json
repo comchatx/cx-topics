@@ -1,6 +1,6 @@
 {
   "name": "@comchatx/cx-topics",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Titles each piece of work, and reads quotes in context.",
   "license": "MIT",
   "author": "ComChatX",
@@ -29,6 +29,7 @@
     "test": "vitest run"
   },
   "comchatx": {
+    "name": "Conversation Titles",
     "about": "每件事都有标题，引用旧消息时 cx 连前后一起读。",
     "mark": {
       "line": "hash"
