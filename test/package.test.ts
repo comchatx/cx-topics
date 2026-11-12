@@ -43,3 +43,8 @@ it("ships the built extension and its README in English and in Chinese", () => {
 it("declares no module type, so pi loads the module at the path it lists the tool's source by", () => {
   expect(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"))).not.toHaveProperty("type");
 });
+
+it("the card's name is comchatx.name, the one signed on 2026-11-11", () => {
+  const field = (JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { comchatx: { name?: unknown } }).comchatx;
+  expect(field.name).toBe("Conversation Titles");
+});
