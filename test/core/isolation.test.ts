@@ -16,8 +16,10 @@ it.each(CORE)("%s imports nothing but the other core files", entry => {
   expect(Object.values(inputs).flatMap(input => input.imports).filter(record => record.external)).toEqual([]);
 });
 
-it("bundles the extension a box installs from the live files alone, as the image build does: nothing from test/", () => {
+// Jev's client is the vendor's package's, inlined with the core it is written on.
+const JEV_CLIENT = ["../node_modules/@comchatx/providers/src/index.ts", "../node_modules/@comchatx/typesafe/src/index.ts"];
+it("bundles the extension a box installs from the live files and Jev's client alone, as the image build does: nothing from test/", () => {
   const inputs = Object.keys(bundled("extensions/topics.ts", PI_SUPPLIED).inputs);
-  expect(inputs.filter(path => !path.startsWith("core/") && !path.startsWith("extensions/"))).toEqual([]);
-  expect(inputs.sort()).toEqual(["core/protocol.ts", "core/routing.ts", "core/titling.ts", "extensions/judge.ts", "extensions/pass.ts", "extensions/topics.ts"]);
+  expect(inputs.filter(path => !path.startsWith("core/") && !path.startsWith("extensions/") && !JEV_CLIENT.includes(path))).toEqual([]);
+  expect(inputs.sort()).toEqual([...JEV_CLIENT, "core/protocol.ts", "core/routing.ts", "core/titling.ts", "extensions/judge.ts", "extensions/pass.ts", "extensions/topics.ts"]);
 });

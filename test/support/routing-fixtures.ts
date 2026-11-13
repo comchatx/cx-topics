@@ -1,4 +1,5 @@
-import type { Decision, RoutingDecision, RoutingInput, TopicProjection } from "../../src/core/routing.js";
+import { askJev } from "@comchatx/typesafe";
+import type { Decision, RoutingAsker, RoutingDecision, RoutingInput, RoutingState, TopicProjection } from "../../src/core/routing.js";
 import type { Questions } from "../../src/core/protocol.js";
 
 export const topicProjection = (title: string | undefined, messages: readonly string[]): TopicProjection => Object.freeze({ ...(title === undefined ? {} : { title }), messages: Object.freeze([...messages]) });
@@ -24,3 +25,9 @@ export const routingFixtures: readonly RoutingFixture[] = Object.freeze([
   fixture("queued-new", "Queue this: after the inventory answer, plan the invented BE3600 sales campaign.", "create-new", 0.05),
   ...(["refused", "timeout", "malformed", "missing"] as const).map(failure => fixture(`provider-${failure}`, "Add a shelf to the same invented inventory plan.", "continue-current", 0.95, "continuation", 0.9, failure)),
 ]);
+
+/** An asker that hands back what pi's classifier would, read by Jev's own client: the answer, or why there is none. */
+export const raw = (ask: (state: RoutingState, questions: Questions, signal: AbortSignal) => unknown): RoutingAsker => async (state, questions, signal) => {
+  const given = await ask(state, questions, signal);
+  return askJev({ findOfType: () => ({}), classify: async () => given } as unknown as Parameters<typeof askJev>[0], {}, questions, { timeoutMs: 1 });
+};

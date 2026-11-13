@@ -1,14 +1,9 @@
-export type Question = { readonly type: "bool"; readonly instructions: string; readonly criteria: { readonly true: string; readonly false: string } };
-export type Questions = Readonly<Record<string, Question>>;
-/** Asks the questions about the state; what it hands back is read as pi's `ClassifierResult`. */
-export type QuestionAsker<State> = (state: State, questions: Questions, signal: AbortSignal) => Promise<unknown>;
-/**
- * Why a call gave no answer. `malformed` and `missing-answers` are calls answered and billed whose answer cannot be read; `rejected` a
- * request the service refused as it is, which it refuses the same way each time it is sent. `refused` is a call refused for a reason
- * outside the request — the account, the platform's gate, a busy or failing service, or a status that cannot be read — `timeout` one cut
- * or not answered in time, and `no-model` one pi has no such model for: each of these may be served once what stood in its way is fixed.
- */
-export type AnswerFailure = "refused" | "rejected" | "timeout" | "malformed" | "missing-answers" | "no-model";
+import type { AnswerFailure, JevAnswer, Questions } from "@comchatx/typesafe";
+
+// The questions, the answer and why a call gave none are Jev's client's, in `@comchatx/typesafe`.
+export type { AnswerFailure, Question, Questions } from "@comchatx/typesafe";
+/** Asks the questions about the state: Jev's answer, or why there is none. */
+export type QuestionAsker<State> = (state: State, questions: Questions, signal: AbortSignal) => Promise<JevAnswer>;
 /** The failures after which the same request may be served: a pass stops at the message, and asks again later. */
 export const STOPPING: ReadonlySet<string> = new Set<AnswerFailure>(["refused", "timeout", "no-model"]);
 export class ReviewFailure extends Error {
@@ -57,25 +52,6 @@ export function failureOf(raw: Readonly<Record<string, unknown>>): AnswerFailure
   return status === 400 || status === 413 || status === 422 || (status === 403 && !GATE_CODES.test(message)) ? "rejected" : "refused";
 }
 
-/** What the classifier gave: the answers, or why there are none. Nothing at all is a model pi does not have. */
-export function parseAnswers(raw: unknown, questions: Questions): Readonly<Record<string, number>> | AnswerFailure {
-  if (raw === undefined) return "no-model";
-  if (!record(raw)) return "malformed";
-  // Anything but an answer is a failure, whatever pi names it: its own timeout reads "error", a cancelled call "aborted".
-  if (raw.stopReason !== "stop") return failureOf(raw);
-  if (!record(raw.answers)) return "malformed";
-  const answers: Record<string, number> = {};
-  for (const key of Object.keys(questions)) {
-    if (!Object.hasOwn(raw.answers, key)) return "missing-answers";
-    const answer = raw.answers[key];
-    // pi checks that a probability is a finite number, not that it lies in [0, 1].
-    if (!record(answer) || answer.type !== "bool" || typeof answer.probability !== "number" || !Number.isFinite(answer.probability)
-      || answer.probability < 0 || answer.probability > 1) return "malformed";
-    answers[key] = answer.probability;
-  }
-  return Object.freeze(answers);
-}
-
 export async function askQuestions<State>(state: State, questions: Questions, ask: QuestionAsker<State>, timeoutMs: number): Promise<Readonly<Record<string, number>> | AnswerFailure> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -83,8 +59,8 @@ export async function askQuestions<State>(state: State, questions: Questions, as
     const deadline = new Promise<never>((_, reject) => {
       timer = setTimeout(() => { reject(new ReviewFailure("timeout")); controller.abort(); }, timeoutMs);
     });
-    const raw = await Promise.race([ask(state, questions, controller.signal), deadline]);
-    try { return parseAnswers(raw, questions); } catch { return "malformed"; }
+    const answer = await Promise.race([ask(state, questions, controller.signal), deadline]);
+    return "failure" in answer ? answer.failure : answer.answers;
   } catch (error) {
     // Only the kind is kept, and only a known one, so an upstream error's text never reaches the advisory.
     return error instanceof ReviewFailure && error.kind === "timeout" ? "timeout" : "refused";
