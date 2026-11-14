@@ -33,7 +33,7 @@ const REVIEWS = Array.from({ length: 60 }, (_, at) => [
 export const CALIBRATION_CASES: readonly CalibrationCase[] = Object.freeze([
   {
     id: "witness",
-    source: "the product owner's live conversation, beta-browser live check 2026-10-20 §6 and listing run day 2 (messages verbatim from the reports, the order from the History screenshot)",
+    source: "the product owner's live conversation, observed in production on 2026-10-20 and on the listing run's second day (messages verbatim as sent, the order as History showed it)",
     messages: [
       open("测试期间只读真店。不发任何会改动店铺的请求；要改的东西只把请求写给我看，不要发。"),
       either("现在装了哪些包？"),
@@ -54,7 +54,7 @@ export const CALIBRATION_CASES: readonly CalibrationCase[] = Object.freeze([
   },
   {
     id: "witness-as-filed",
-    source: "the witness with production's rows before 「换个新话题」 given as History showed them (beta-browser live check 2026-10-20 §6): the listing row's title on its first message, everything after it in that row",
+    source: "the witness with production's rows before 「换个新话题」 given as History showed them on 2026-10-20: the listing row's title on its first message, everything after it in that row",
     messages: [
       given("测试期间只读真店。不发任何会改动店铺的请求；要改的东西只把请求写给我看，不要发。", "SP-API 只读边界确认"),
       given("现在装了哪些包？"),

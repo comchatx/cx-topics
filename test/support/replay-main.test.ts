@@ -25,7 +25,7 @@ it("runs by hand on the stand-in with no key: the cases named alone, the records
   const temporary = owned(tmpdir(), "replay-main-tmp-");
   const out = join(owned(tmpdir(), "replay-main-out-"), "run");
   const entry = join(bundled, "replay-main.mjs");
-  await build({ absWorkingDir: repository, entryPoints: ["test/support/replay-main.ts"], outfile: entry, bundle: true, platform: "node", format: "esm", packages: "external", logLevel: "silent" });
+  await build({ absWorkingDir: repository, entryPoints: ["test/support/replay-main.ts"], outfile: entry, bundle: true, platform: "node", format: "esm", external: ["@earendil-works/*"], logLevel: "silent" });
   // Nothing of the machine's reaches it: no key, no home, a temporary directory of the test's own.
   const { stdout } = await run(process.execPath, [entry, "--cases", "witness", "--out", out], { cwd: repository, env: { PATH: process.env.PATH ?? "", TMPDIR: temporary }, timeout: 60_000 });
   expect(stdout.trim()).toBe(`${out}.md`);

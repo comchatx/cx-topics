@@ -5,6 +5,7 @@ import { continuationBars, routeTopic } from "../../src/core/routing.js";
 import { createJudge, projection, topicBefore, type JudgeContext } from "../../src/extensions/judge.js";
 import { title } from "../../src/extensions/topics.js";
 import type { CalibrationCase, Expected } from "./calibration-cases.js";
+import { raw } from "./routing-fixtures.js";
 
 /** TypeSafe's price for Jev's input, US$ per token, and the platform's margin: the card's *Money* formula, which the ledger books. */
 const JEV_USD_PER_TOKEN = 0.042 / 1_000_000;
@@ -134,7 +135,7 @@ export async function replayCase(registry: Registry, item: CalibrationCase, budg
     let reason: string | undefined;
     if (topic === undefined) verdict = "first";
     else {
-      const advisory = await routeTopic(input!, { ask: async () => answered, now: () => 0 });
+      const advisory = await routeTopic(input!, { ask: raw(async () => answered), now: () => 0 });
       if (advisory.status === "available") {
         answers = advisory.probabilities as Answers;
         verdict = advisory.decision === "create-new" ? "new" : advisory.titleFlag === true ? "continue, rewrite asked" : "continue";

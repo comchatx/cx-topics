@@ -1,10 +1,11 @@
+import { askJev, JEV_MODEL, JEV_PROVIDER } from "@comchatx/typesafe";
 import type { ModelRegistry, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { failureOf, STOPPING, type AnswerFailure } from "../core/protocol.js";
 import { ROUTING_LIMITS, routeTopic, type RoutingAdvisory, type RoutingAsker, type RoutingInput } from "../core/routing.js";
 import { TITLE_SYSTEM, titlePrompt, type TitleRequest } from "../core/titling.js";
 
-/** Jev as pi's catalogue names it. Where it is and with which key is pi's provider configuration, so this package holds neither. */
-export const JEV = Object.freeze({ provider: "typesafe", model: "jev-latest" });
+/** Jev as pi's catalogue names it, by its client's names. Where it is and with which key is pi's provider configuration, so this package holds neither. */
+export const JEV = Object.freeze({ provider: JEV_PROVIDER, model: JEV_MODEL });
 /** The API pi lists a virtual model under: a selection pi routes to a physical model of the router's choosing at each request. */
 const VIRTUAL = "pi-virtual";
 /** How long one call is given, as cx-jev-tidy gives its own. */
@@ -75,18 +76,13 @@ export function verdictOf(advisory: RoutingAdvisory): Verdict | undefined {
   return Object.freeze(advisory.decision === "continue-current" ? { decision: "continue" as const, stale: advisory.titleFlag === true } : { decision: "new" as const });
 }
 
-type ClassifierState = Parameters<ModelRegistry["classify"]>[1]["state"];
-
 /**
  * Asks through pi's classifier with no retry, since a call TypeSafe received is billed even when its answer is lost. Its signal is the
  * router's deadline alone: Stop ends cx's answer, not the filing of the message the seller sent, and a call cut after TypeSafe has it is
  * billed all the same.
  */
-export const asker = (ctx: JudgeContext): RoutingAsker => async (state, questions, signal) => {
-  const jev = ctx.modelRegistry.findOfType("classifier", JEV.provider, JEV.model);
-  if (jev === undefined) return undefined;
-  return ctx.modelRegistry.classify(jev, { state: state as unknown as ClassifierState, questions }, { maxRetries: 0, timeoutMs: CALL_MS, signal });
-};
+export const asker = (ctx: JudgeContext): RoutingAsker => (state, questions, signal) =>
+  askJev(ctx.modelRegistry as Parameters<typeof askJev>[0], state, questions, { timeoutMs: CALL_MS, signal });
 
 /** What the title model gave: a title's raw words, or why there are none. */
 export type Titled = { readonly text: string } | { readonly failure: AnswerFailure };

@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { routeTopic, ROUTING_LIMITS, type RoutingInput } from "../../src/core/routing.js";
-import { routingFixtures, scriptedRoutingAnswers, topicProjection } from "../support/routing-fixtures.js";
+import { raw, routingFixtures, scriptedRoutingAnswers, topicProjection } from "../support/routing-fixtures.js";
 
 const input = (): RoutingInput => ({ ...routingFixtures[0]!.input });
 const bad = () => {
@@ -18,9 +18,9 @@ const bad = () => {
     { ...one, currentLength: 1 }, { ...one, currentLength: 2.5 }, { ...one, currentLength: "2" },
   ];
 };
-it.each(bad())("returns invalid-input without asking or disclosure for invalid routing envelope %#", async raw => {
+it.each(bad())("returns invalid-input without asking or disclosure for invalid routing envelope %#", async envelope => {
   const ask = vi.fn();
-  const result = await routeTopic(raw as unknown as RoutingInput, { ask, now: () => 0 });
+  const result = await routeTopic(envelope as unknown as RoutingInput, { ask: raw(ask), now: () => 0 });
   expect(result).toMatchObject({ status: "unavailable", reason: "invalid-input", requestCount: 0, decision: null, disclosedFields: [] });
   expect(ask).not.toHaveBeenCalled();
   expect(Object.isFrozen(result.baseline)).toBe(true);
@@ -28,13 +28,13 @@ it.each(bad())("returns invalid-input without asking or disclosure for invalid r
 it("judges against a title with no words of the seller's under it, or words with no title, asking whether a title still names the work only where there is one", async () => {
   const one = input();
   const ask = vi.fn(async (_state, questions) => scriptedRoutingAnswers(questions, 0.9));
-  const titled = await routeTopic({ ...one, current: topicProjection("Invented image work", []), currentLength: 1 }, { ask, now: () => 0 });
+  const titled = await routeTopic({ ...one, current: topicProjection("Invented image work", []), currentLength: 1 }, { ask: raw(ask), now: () => 0 });
   expect(titled).toMatchObject({ status: "available", decision: "continue-current", titleFlag: false, disclosedFields: ["current", "current.title", "current.messages", "latestUserMessage"] });
   expect(Object.keys(ask.mock.calls[0]![1])).toEqual(["significantChange", "continueCurrent", "titleAdequate"]);
   expect(ask.mock.calls[0]![0]).toEqual({ current: { title: "Invented image work", messages: [] }, latestUserMessage: one.latestUserMessage });
   const untitled = { ...one, current: topicProjection(undefined, one.current.messages) };
-  expect(await routeTopic(untitled, { ask: async (_s, q) => scriptedRoutingAnswers(q, 0.9), now: () => 0 })).toMatchObject({ decision: "continue-current", titleFlag: null });
-  expect(await routeTopic(untitled, { ask: async (_s, q) => scriptedRoutingAnswers(q, 0.45), now: () => 0 })).toMatchObject({ decision: "create-new" });
+  expect(await routeTopic(untitled, { ask: raw(async (_s, q) => scriptedRoutingAnswers(q, 0.9)), now: () => 0 })).toMatchObject({ decision: "continue-current", titleFlag: null });
+  expect(await routeTopic(untitled, { ask: raw(async (_s, q) => scriptedRoutingAnswers(q, 0.45)), now: () => 0 })).toMatchObject({ decision: "create-new" });
 });
 it("keeps a full request in Chinese text within the size of the full one before it, at most the seller-message bound", async () => {
   // A full projection in Chinese: an 80-character title, the bound's messages at 512 characters and the latest at 2,048, three bytes a
@@ -42,10 +42,10 @@ it("keeps a full request in Chinese text within the size of the full one before 
   let bytes = 0;
   let questionCount = 0;
   const full = { ...input(), current: topicProjection("燈".repeat(80), Array(ROUTING_LIMITS.sellerMessages).fill("船".repeat(512))), latestUserMessage: "船".repeat(2048), currentLength: 40 };
-  const result = await routeTopic(full, { ask: async (state, questions) => {
+  const result = await routeTopic(full, { ask: raw(async (state, questions) => {
     bytes = Buffer.byteLength(JSON.stringify({ model: "jev-latest", state, questions })); questionCount = Object.keys(questions).length;
     return scriptedRoutingAnswers(questions, 0.95);
-  }, now: () => 0 });
+  }), now: () => 0 });
   expect(result.decision).toBe("continue-current");
   expect(questionCount).toBe(3);
   expect(bytes).toBeLessThanOrEqual(56_355);
