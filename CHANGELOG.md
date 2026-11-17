@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.9
+
+- The card's name is the one signed on 2026-11-17: "Chat Chapters" on the English page (`comchatx.name`) and 「随题话章」 on the Chinese page (`comchatx.nameZh`).
+
 ## 0.1.8
 
 - Jev's client is `@comchatx/typesafe`'s, a dependency from 0.1.3 on: `askJev` asks pi's classifier with no retry, and `JEV_PROVIDER`, `JEV_MODEL`, `Question`, `Questions` and `AnswerFailure` are its. This package's own copies are gone: the two names, the question and failure types, and the reading of pi's classifier result (`parseAnswers`). `failureOf` stays here: it reads the title model's failure, a chat model's.

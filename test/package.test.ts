@@ -45,6 +45,7 @@ it("declares no module type, so pi loads the module at the path it lists the too
 });
 
 it("the card's name is comchatx.name, the one signed on 2026-11-11", () => {
-  const field = (JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { comchatx: { name?: unknown } }).comchatx;
-  expect(field.name).toBe("Conversation Titles");
+  const field = (JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { comchatx: { name?: unknown; nameZh?: unknown } }).comchatx;
+  expect(field.name).toBe("Chat Chapters");
+  expect(field.nameZh).toBe("随题话章");
 });
