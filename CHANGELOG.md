@@ -2,7 +2,7 @@
 
 ## 0.1.10
 
-- The README's "What it needs" section goes, its heading with it (signed on 2026-11-19): the Plugins page draws Jev from `comchatx.builds`. "What it costs" is unchanged.
+- The README's "What it needs" section goes, its heading with it (signed on 2026-11-18): the Plugins page draws Jev from `comchatx.builds`. "What it costs" is unchanged.
 
 ## 0.1.9
 
