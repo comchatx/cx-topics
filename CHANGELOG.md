@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.10
+
+- The README's "What it needs" section goes, its heading with it (signed on 2026-11-18): the Plugins page draws Jev from `comchatx.builds`. "What it costs" is unchanged.
+
 ## 0.1.9
 
 - The card's name is the one signed on 2026-11-17: "Chat Chapters" on the English page (`comchatx.name`) and 「随题话章」 on the Chinese page (`comchatx.nameZh`).
