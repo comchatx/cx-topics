@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.11
+
+- The tile's mark on the Plugins page is the signed drawing.
+
 ## 0.1.10
 
 - The README's "What it needs" section goes, its heading with it (signed on 2026-11-18): the Plugins page draws Jev from `comchatx.builds`. "What it costs" is unchanged.
