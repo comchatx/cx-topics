@@ -1,6 +1,6 @@
 {
   "name": "@comchatx/cx-topics",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Titles each piece of work, and reads quotes in context.",
   "license": "MIT",
   "author": "ComChatX",
@@ -33,7 +33,19 @@
     "nameZh": "随题话章",
     "about": "每件事都有标题，引用旧消息时 cx 连前后一起读。",
     "mark": {
-      "line": "hash"
+      "on": "cx",
+      "cx": [
+        {
+          "x": 8.352,
+          "y": 15.648,
+          "size": 22.216
+        }
+      ],
+      "draw": [
+        {
+          "d": "M16.104 11.24L16.869 7.594L19.456 9.616ZM17.094 7.307L21.81 1.27L24.397 3.291L19.681 9.328ZM22.035 0.982L23.12 -0.407A0.426 0.426 308 0 1 23.718 -0.48L25.634 1.017A0.426 0.426 308 0 1 25.708 1.614L24.622 3.004Z"
+        }
+      ]
     },
     "section": "extensions",
     "order": 100,
