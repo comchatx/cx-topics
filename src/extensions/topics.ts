@@ -1,5 +1,8 @@
 import type { ExtensionAPI, SessionEntry } from "@earendil-works/pi-coding-agent";
-import { createPass, PROGRESS } from "./pass.js";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createPass, INSTALLS_FILE, installKey, PROGRESS, tokenIn } from "./pass.js";
 
 /** A title is short enough for one sidebar row: at most this many words, and this many characters for a language written without spaces. */
 export const TITLE_WORDS = 8;
@@ -114,13 +117,29 @@ export function quoted(session: Session, id: string): string {
 
 const text = (words: string) => ({ content: [{ type: "text" as const, text: words }], details: {} });
 
+/** The tool this package registers, by which pi's tool list names the package's own source. */
 const TOOL = "quoted";
 
+/**
+ * This package's install key: the source of the tool pi holds under `quoted` when that tool is this file's own. pi keeps the first
+ * registration of a name, so another package's `quoted` names no key here; none found, none read.
+ */
+export function ownKey(pi: Pick<ExtensionAPI, "getAllTools">, file: string): string | undefined {
+  const own = pi.getAllTools().find(tool => tool.name === TOOL && typeof tool.sourceInfo?.path === "string" && resolve(tool.sourceInfo.path) === resolve(file));
+  return own === undefined || typeof own.sourceInfo.source !== "string" ? undefined : installKey(own.sourceInfo.source);
+}
+
+const readText = (file: string): string | undefined => {
+  try { return readFileSync(file, "utf8"); } catch { return undefined; }
+};
+
 export default function topics(pi: ExtensionAPI): void {
+  const file = fileURLToPath(import.meta.url);
   const pass = createPass({
     title,
     setLabel: (id, label) => pi.setLabel(id, label),
     keep: progress => pi.appendEntry(PROGRESS, progress),
+    token: ctx => tokenIn(readText(join(ctx.cwd, INSTALLS_FILE)), ownKey(pi, file)),
   });
   pi.on("message_end", event => { if (event.message.role === "user") pass.arrived(); });
   pi.on("context", (_event, ctx) => { pass.context(ctx); });
@@ -140,5 +159,7 @@ export default function topics(pi: ExtensionAPI): void {
   });
 }
 
-// What a box's other parts hold this package to, read from the built module: Jev, the one model it names.
+// What a box's other parts hold this package to, read from the built module: the installs file and key the pass is checked against, and
+// Jev, the one model it names.
+export { INSTALLS_FILE, installKey } from "./pass.js";
 export { JEV } from "./judge.js";

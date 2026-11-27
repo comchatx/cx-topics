@@ -8,11 +8,11 @@ The package names and renames. It titles the conversation's first seller message
 
 A title is a pi label on a seller message: a new topic's on its first message, a rewrite as a later label on the same message. A message of no words, an image or quotes alone, gets no title of its own and stays in the topic before it. A message continues the current topic or opens a new one; none returns to an earlier topic.
 
-**When it asks.** One Jev classify per seller message under a title. One pass at a time walks the seller messages on the branch (`getBranch`) in order, from the last one its progress names, and judges each not judged yet (`src/extensions/pass.ts`). The progress is a custom entry under `cx-topics`, `{through: <entry id>}` after each judged message; pi keeps them in the session file and puts none in the model's context.
+**When it asks.** One Jev classify per seller message under a title. One pass at a time walks the seller messages on the branch (`getBranch`) in order, from the last one its progress names, and judges each not judged yet (`src/extensions/pass.ts`). The progress is a custom entry under `cx-topics`, `{through: <entry id>}` after each judged message and `{install: <token>}` after an install's clears; pi keeps them in the session file and puts none in the model's context.
 
-**Where it carries on.** A progress entry naming a message no longer on the branch carries on from the branch's newest seller message, asking nothing. A first load with no progress entry writes a starting entry at the branch's newest seller message and asks nothing.
+**Where it carries on.** A progress entry naming a message no longer on the branch carries on from the branch's newest seller message, asking nothing. A first load with no progress entry and no unseen install token writes a starting entry at the branch's newest seller message and asks nothing.
 
-**After a reinstall.** The session's progress entries stay in its file, so a reinstall carries on from the last one: a seller message sent while the package was off is judged when the pass reaches it, and the titles already written stay.
+**When it starts over.** Only an install starts from the first message: it clears every title the package wrote and titles the conversation again. pi tells a package nothing of how it came to be loaded, so the host records each install with a fresh token in `.pi/cx-installs.json` under the project (`INSTALLS_FILE`), keyed by the package's source with any npm version dropped (`installKey`), and the package reads a load as an install when the token for its own key is in none of its progress entries. Its key is the source pi lists for the `quoted` tool whose file is the package's own, so another package's `quoted` lends none. No key, no file, no token or a file that does not read: it carries on.
 
 **When it titles.**
 - The conversation's first seller message with words, and a message Jev judges new work: the title model titles it from the seller's message alone.
@@ -47,11 +47,12 @@ one marker per quoted message or selection, before the seller's own words. Quote
 
 - `src/core/` holds the pure parts — the protocol of Jev's questions, the routing bars and the title's cut — and imports nothing but itself.
 - `src/extensions/topics.ts` is the one extension; `judge.ts` asks and writes, `pass.ts` walks the branch. `npm run build` bundles `topics.ts` into `dist/extensions/topics.js`, Jev's client from `@comchatx/typesafe` inlined and pi's own packages left for pi to supply; the package ships that file alone. The built module also exports `INSTALLS_FILE`, `installKey` and `JEV`, for a host to hold the package to.
+- `package.json` declares no `type`. pi's loader then reads the bundle at the path pi lists the `quoted` tool's source by; declared a module, it is loaded natively and knows itself by its real path, which behind a symlink is not the path pi lists, so the package would find no key of its own and miss an install.
 
 ## Tests
 
-- `test/core/` — the protocol, the routing bars against a fixed comparison (`test/support/routing-comparison.json`), the title's cut, and that the core imports nothing else and the bundle carries the live files alone.
-- `test/extensions/` — the title and the quote reading on pi's own session shapes, Jev's verdict and the titles, and the pass: judging from the first, carrying on (a reinstall among the loads), a branch left, one pass at a time, and a reload's cut call asked again.
+- `test/core/` — the protocol, the routing bars, the title's cut, and that the core imports nothing else and the bundle carries the live files alone.
+- `test/extensions/` — the title and the quote reading on pi's own session shapes, Jev's verdict and the titles, and the pass: an install's clears and its judging from the first, carrying on, a branch left, one pass at a time, a reload's cut call asked again, and the key read from pi's tool list.
 - `test/support/replay.test.ts` and `replay-main.test.ts` — the calibration replay on a stand-in through pi's own registry, with no key: the title request names the session's model, a model switched between two messages titles the second, a virtual model is routed to its physical model, the output tokens and thinking a physical and a routed request carry, and a model pi holds no key for is asked nothing.
 - `test/package.test.ts` — the pinned pi loads the built extension with its tool and handlers; the built module exports what a host holds it to; the package ships the built extension alone.
 
