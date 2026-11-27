@@ -1,6 +1,6 @@
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { afterEach, expect, it, vi } from "vitest";
-import { routeTopic, ROUTING_LIMITS, type RoutingAdvisory } from "../../src/core/routing.js";
+import { routeTopic, ROUTING_LIMITS, type RoutingAdvisory, type RoutingDecision } from "../../src/core/routing.js";
 import { TITLE_SYSTEM, titlePrompt } from "../../src/core/titling.js";
 import { holdsSymbol } from "../support/disclosure.js";
 import { raw } from "../support/routing-fixtures.js";
@@ -24,7 +24,7 @@ it("shows Jev the topic in progress by its title and the seller's own words in i
   const input = projection(conversation(), label({ ...LABELS }), "u3")!;
   expect(JSON.parse(JSON.stringify(input))).toEqual({
     current: { title: "Walmart inventory", messages: ["Now plan the invented Walmart inventory."] },
-    latestUserMessage: "Add a reorder point to the plan.", baselineDecision: "continuation", currentLength: 1,
+    latestUserMessage: "Add a reorder point to the plan.", currentLength: 1,
   });
   expect(JSON.stringify(input)).not.toMatch(/Invented (stock plan|BE3600 notes)|BE3600 positioning|invented (system|tool|custom|bash|private|greeting|hello)|secret|aW52/);
   expect(input).not.toHaveProperty("provenance");
@@ -56,14 +56,14 @@ it("finds the topic before a message by the seller message its title is on, and 
   expect(topicBefore(conversation(), label({ ...LABELS }), "gone")).toBeUndefined();
 });
 
-it("acts on no unavailable result, though it carries a fallback decision, and reads a stale title only on a continuation", async () => {
+it("acts on no unavailable result, and reads a stale title only on a continuation", async () => {
   const input = projection(conversation(), label({ ...LABELS }), "u3")!;
   for (const given of [{ stopReason: "error", answers: {} }, { stopReason: "aborted", answers: {} }, { stopReason: "stop", answers: {} }, undefined]) {
-    const advisory = await routeTopic(input, { ask: raw(async () => given), now: () => 0 });
-    expect(advisory).toMatchObject({ status: "unavailable", decision: "continue-current" });
+    const advisory = await routeTopic(input, { ask: raw(async () => given) });
+    expect(advisory).toMatchObject({ status: "unavailable" });
     expect(verdictOf(advisory)).toBeUndefined();
   }
-  const available = (decision: RoutingAdvisory["decision"], titleFlag: boolean | null) => ({ status: "available", decision, titleFlag }) as RoutingAdvisory;
+  const available = (decision: RoutingDecision, titleFlag: boolean | null): RoutingAdvisory => ({ status: "available", decision, titleFlag });
   expect(verdictOf(available("continue-current", false))).toEqual({ decision: "continue", stale: false });
   expect(verdictOf(available("continue-current", null))).toEqual({ decision: "continue", stale: false });
   expect(verdictOf(available("continue-current", true))).toEqual({ decision: "continue", stale: true });
@@ -72,16 +72,15 @@ it("acts on no unavailable result, though it carries a fallback decision, and re
 
 it("asks pi's classifier for Jev with no retry and the call's own deadline alone, so Stop leaves it, and no key, address or header of its own", async () => {
   const one = context(conversation(), continuing);
-  const signal = new AbortController().signal;
-  const raw = await asker(one.ctx)(STATE, { q: { type: "bool", instructions: "i", criteria: { true: "t", false: "f" } } }, signal);
+  const raw = await asker(one.ctx)(STATE, { q: { type: "bool", instructions: "i", criteria: { true: "t", false: "f" } } });
   expect(one.raw.modelRegistry.findOfType).toHaveBeenCalledWith("classifier", "typesafe", "jev-latest");
   expect(one.raw.modelRegistry.classify.mock.calls[0]![0]).toBe(one.jev);
-  expect(one.asked[0]!.options).toEqual({ maxRetries: 0, timeoutMs: 20_000, signal });
+  expect(one.asked[0]!.options).toEqual({ maxRetries: 0, timeoutMs: 20_000 });
   expect(raw).toEqual({ answers: { q: expect.any(Number) } });
   // Where pi has no Jev configured nothing is asked, and the answer is no answer.
   const none = context(conversation(), continuing);
   none.raw.modelRegistry.findOfType.mockReturnValue(undefined as never);
-  expect(await asker(none.ctx)(STATE, {}, signal)).toEqual({ failure: "no-model" });
+  expect(await asker(none.ctx)(STATE, {})).toEqual({ failure: "no-model" });
   expect(none.raw.modelRegistry.classify).not.toHaveBeenCalled();
 });
 

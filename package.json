@@ -1,6 +1,6 @@
 {
   "name": "@comchatx/cx-topics",
-  "version": "0.1.11",
+  "version": "0.2.0",
   "description": "Titles each piece of work, and reads quotes in context.",
   "license": "MIT",
   "author": "ComChatX",

@@ -4,7 +4,6 @@ import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
 import { build } from "../scripts/build.mjs";
-import { INSTALLS_FILE, installKey } from "../src/extensions/pass.js";
 import { JEV } from "../src/extensions/judge.js";
 import { loadPackage } from "./pi.js";
 
@@ -20,11 +19,10 @@ it("the pinned pi loads the one extension from the built dist/, with its tool an
   expect(extensions.map((extension) => [...extension.handlers.keys()].sort())).toEqual([["context", "message_end", "session_shutdown", "session_start"]]);
 });
 
-it("the built module carries what a box holds the package to: the installs file and key, and Jev, the one model it names", async () => {
+it("the built module carries what a box holds the package to: Jev, the one model it names, and no installs file or key", async () => {
   build(ROOT);
   const built = (await import(pathToFileURL(BUILT).href)) as Record<string, unknown>;
-  expect([built["INSTALLS_FILE"], built["JEV"], "TITLE_MODEL" in built]).toEqual([INSTALLS_FILE, JEV, false]);
-  expect((built["installKey"] as typeof installKey)("npm:@comchatx/cx-topics@0.1.3")).toBe(installKey("npm:@comchatx/cx-topics@0.1.3"));
+  expect([built["JEV"], "TITLE_MODEL" in built, "INSTALLS_FILE" in built, "installKey" in built]).toEqual([JEV, false, false, false]);
 });
 
 it("says on the Plugins page that it builds on Jev, the card the page draws among the plugins it uses", () => {

@@ -66,23 +66,23 @@ export function projection(branch: readonly SessionEntry[], label: (id: string) 
   return Object.freeze({
     current: Object.freeze({ title: topic.title, messages: Object.freeze(topic.said.slice(-ROUTING_LIMITS.sellerMessages)) }),
     // Without a verdict a message stays in the topic in progress.
-    latestUserMessage: words(latest as Said), baselineDecision: "continuation" as const, currentLength: topic.length,
+    latestUserMessage: words(latest as Said), currentLength: topic.length,
   });
 }
 
-/** A verdict only from an answer: an unavailable advisory carries a fallback decision, and it is not one. */
+/** A verdict only from an answer. */
 export function verdictOf(advisory: RoutingAdvisory): Verdict | undefined {
   if (advisory.status !== "available") return undefined;
   return Object.freeze(advisory.decision === "continue-current" ? { decision: "continue" as const, stale: advisory.titleFlag === true } : { decision: "new" as const });
 }
 
 /**
- * Asks through pi's classifier with no retry, since a call TypeSafe received is billed even when its answer is lost. Its signal is the
- * router's deadline alone: Stop ends cx's answer, not the filing of the message the seller sent, and a call cut after TypeSafe has it is
- * billed all the same.
+ * Asks through pi's classifier with no retry, since a call TypeSafe received is billed even when its answer is lost, within `CALL_MS` and
+ * on no other signal: Stop ends cx's answer, not the filing of the message the seller sent, and a call cut after TypeSafe has it is billed
+ * all the same.
  */
-export const asker = (ctx: JudgeContext): RoutingAsker => (state, questions, signal) =>
-  askJev(ctx.modelRegistry as Parameters<typeof askJev>[0], state, questions, { timeoutMs: CALL_MS, signal });
+export const asker = (ctx: JudgeContext): RoutingAsker => (state, questions) =>
+  askJev(ctx.modelRegistry as Parameters<typeof askJev>[0], state, questions, { timeoutMs: CALL_MS });
 
 /** What the title model gave: a title's raw words, or why there are none. */
 export type Titled = { readonly text: string } | { readonly failure: AnswerFailure };
@@ -142,12 +142,14 @@ export function createJudge(title: (raw: string) => string | undefined, setLabel
     const latest = branch.find(entry => entry.id === id);
     if (latest === undefined || !isSellers(latest)) return "judged";
     const said = words(latest);
+    // A message of no words, an image or a quote alone, is neither asked about nor titled.
+    if (said === "") return "judged";
     const topic = topicBefore(branch, labelOf(ctx), id);
     // Before the first title there is no topic to continue, so Jev is not asked: the message opens one.
-    if (topic === undefined) return said === "" ? "judged" : name(ctx, id, { messages: [said] });
-    const advisory = await routeTopic(projection(branch, labelOf(ctx), id)!, { ask: asker(ctx), now: Date.now, timeoutMs: CALL_MS });
+    if (topic === undefined) return name(ctx, id, { messages: [said] });
+    const advisory = await routeTopic(projection(branch, labelOf(ctx), id)!, { ask: asker(ctx) });
     const verdict = verdictOf(advisory);
-    if (verdict === undefined) return ended(advisory.reason === "invalid-input" ? undefined : advisory.reason);
+    if (verdict === undefined) return ended(advisory.status === "unavailable" ? advisory.reason : undefined);
     if (verdict.decision === "new") return name(ctx, id, { messages: [said] });
     if (verdict.stale) return name(ctx, topic.start, { title: topic.title, messages: [...topic.said, said] });
     return "judged";
