@@ -1,13 +1,12 @@
-import { afterEach, expect, it, vi } from "vitest";
-import { routeTopic, ROUTING_LIMITS, type RoutingInput } from "../../src/core/routing.js";
-import { failureOf, ReviewFailure } from "../../src/core/protocol.js";
+import { expect, it } from "vitest";
+import { routeTopic, type RoutingInput } from "../../src/core/routing.js";
+import { failureOf } from "../../src/core/protocol.js";
 import { raw, routingFixtures } from "../support/routing-fixtures.js";
 
-afterEach(() => vi.useRealTimers());
 const input = (): RoutingInput => ({ ...routingFixtures[0]!.input });
 const bool = (probability: unknown) => ({ type: "bool", probability });
 const answers = { significantChange: bool(0.1), continueCurrent: bool(0.9), titleAdequate: bool(0.9) };
-const evaluate = (given: unknown) => routeTopic(input(), { ask: raw(async () => given), now: () => 0 });
+const evaluate = (given: unknown) => routeTopic(input(), { ask: raw(async () => given) });
 it.each([
   { stopReason: "stop", answers: { ...answers, significantChange: { type: "choice", probability: 0.1 } } },
   { stopReason: "stop", answers: { ...answers, significantChange: { type: "bool", noul: 0.1 } } },
@@ -17,10 +16,10 @@ it.each([
   expect(await evaluate(given)).toMatchObject({ status: "unavailable", reason: "malformed" });
 });
 
-it("rejects malformed, missing, nonfinite and out-of-range probabilities while retaining the baseline", async () => {
+it("rejects malformed, missing, nonfinite and out-of-range probabilities", async () => {
   for (const raw of [null, [], "yes", { stopReason: "stop" }, { stopReason: "stop", answers: [] }, { stopReason: "stop", answers: null },
     ...[null, {}, true, "yes", NaN, Infinity, -Infinity, -0.01, 1.01].map(probability => ({ stopReason: "stop", answers: { ...answers, significantChange: bool(probability) } }))]) {
-    expect(await evaluate(raw)).toMatchObject({ status: "unavailable", reason: "malformed", baseline: { decision: "continuation" }, probabilities: null });
+    expect(await evaluate(raw)).toEqual({ status: "unavailable", reason: "malformed" });
   }
   for (const key of Object.keys(answers)) {
     const partial: Record<string, unknown> = { ...answers }; delete partial[key];
@@ -38,19 +37,11 @@ it("returns unavailable for any result but an answer, whatever pi names it, keep
   }
 });
 
-it("returns unavailable for explicit refusal, thrown failure and timeout, and keeps only a known failure kind", async () => {
-  for (const error of [new ReviewFailure("refused"), new Error("invented secret error body"), new ReviewFailure("timeout"), new ReviewFailure("invented upstream body" as "refused")]) {
-    const result = await routeTopic(input(), { ask: raw(async () => { throw error; }), now: () => 0 });
-    expect(result).toMatchObject({ status: "unavailable", reason: error instanceof ReviewFailure && error.kind === "timeout" ? "timeout" : "refused" });
-    expect(JSON.stringify(result)).not.toMatch(/invented (secret|upstream)/);
+it("returns unavailable for a thrown failure, a timeout among them, and keeps none of its text", async () => {
+  for (const [error, reason] of [[new Error("invented secret error body"), "refused"], [new Error("Request timed out"), "timeout"]] as const) {
+    const result = await routeTopic(input(), { ask: raw(async () => { throw error; }) });
+    expect(result).toEqual({ status: "unavailable", reason });
   }
-  vi.useFakeTimers();
-  let signal: AbortSignal | undefined;
-  const pending = routeTopic(input(), { ask: raw(async (_state, _questions, received) => { signal = received; return new Promise(() => {}); }), now: () => Date.now() });
-  await vi.advanceTimersByTimeAsync(ROUTING_LIMITS.timeoutMs);
-  expect(await pending).toMatchObject({ status: "unavailable", reason: "timeout", requestCount: 1, latencyMs: ROUTING_LIMITS.timeoutMs });
-  expect(signal!.aborted).toBe(true);
-  expect(vi.getTimerCount()).toBe(0);
 });
 
 it("requires an own answer to every question, and forwards none of pi's metadata", async () => {
@@ -59,7 +50,7 @@ it("requires an own answer to every question, and forwards none of pi's metadata
   const result = { api: "typesafe-system-one", provider: "typesafe", model: "jev-latest", answers: { ...answers }, stopReason: "stop", usage: { input: 445, output: 0 }, timestamp: 1 };
   const advisory = await evaluate(result);
   result.answers.significantChange = bool(1);
-  expect(advisory).toMatchObject({ status: "available", probabilities: { significantChange: 0.1, continueCurrent: 0.9 } });
+  expect(advisory).toEqual({ status: "available", decision: "continue-current", titleFlag: false });
   for (const key of ["api", "provider", "model", "usage", "timestamp"]) expect(advisory).not.toHaveProperty(key);
 });
 

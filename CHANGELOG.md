@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0
+
+- A reinstall no longer clears the titles and asks Jev again about every seller message of every conversation. The session's progress carries on, so a message sent while the package was off is judged when the pass reaches it. The package reads no `.pi/cx-installs.json`, and the built module no longer exports `INSTALLS_FILE` or `installKey`.
+- `routeTopic` answers a decision and a stale-title flag, or why there is none. The fields nothing read are gone: `baseline`, `fallback`, `probabilities`, `disagreement`, `requestCount`, `latencyMs` and `disclosedFields`. Also gone are the input copy guarding against getters, the input validation (a message of no words is passed over before Jev is asked, as it was) and the router's own deadline beside `askJev`'s 20 seconds. What a judgment decides is unchanged.
+
 ## 0.1.11
 
 - The tile's mark on the Plugins page is the signed drawing.

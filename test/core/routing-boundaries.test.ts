@@ -3,38 +3,16 @@ import { routeTopic, ROUTING_LIMITS, type RoutingInput } from "../../src/core/ro
 import { raw, routingFixtures, scriptedRoutingAnswers, topicProjection } from "../support/routing-fixtures.js";
 
 const input = (): RoutingInput => ({ ...routingFixtures[0]!.input });
-const bad = () => {
-  const one = input();
-  const topic = one.current;
-  return [null, undefined,
-    { ...one, baselineDecision: "rename" }, { ...one, latestUserMessage: " " },
-    { ...one, current: undefined }, { ...one, current: null },
-    { ...one, current: { ...topic, messages: null } }, { ...one, current: { ...topic, messages: new Array(3) } }, { ...one, current: { ...topic, messages: [topic.messages[0], , topic.messages[1]] } },
-    { ...one, current: { ...topic, title: "one\ntwo" } }, { ...one, current: { ...topic, title: "x".repeat(81) } },
-    { ...one, current: { messages: [] } }, { ...one, current: { ...topic, messages: [null] } },
-    { ...one, current: { ...topic, messages: [{ role: "user", text: topic.messages[0] }] } },
-    { ...one, current: { ...topic, messages: Array(ROUTING_LIMITS.sellerMessages + 1).fill(topic.messages[0]) } },
-    // A length shorter than the seller's messages shown, or not a whole count.
-    { ...one, currentLength: 1 }, { ...one, currentLength: 2.5 }, { ...one, currentLength: "2" },
-  ];
-};
-it.each(bad())("returns invalid-input without asking or disclosure for invalid routing envelope %#", async envelope => {
-  const ask = vi.fn();
-  const result = await routeTopic(envelope as unknown as RoutingInput, { ask: raw(ask), now: () => 0 });
-  expect(result).toMatchObject({ status: "unavailable", reason: "invalid-input", requestCount: 0, decision: null, disclosedFields: [] });
-  expect(ask).not.toHaveBeenCalled();
-  expect(Object.isFrozen(result.baseline)).toBe(true);
-});
 it("judges against a title with no words of the seller's under it, or words with no title, asking whether a title still names the work only where there is one", async () => {
   const one = input();
   const ask = vi.fn(async (_state, questions) => scriptedRoutingAnswers(questions, 0.9));
-  const titled = await routeTopic({ ...one, current: topicProjection("Invented image work", []), currentLength: 1 }, { ask: raw(ask), now: () => 0 });
-  expect(titled).toMatchObject({ status: "available", decision: "continue-current", titleFlag: false, disclosedFields: ["current", "current.title", "current.messages", "latestUserMessage"] });
+  const titled = await routeTopic({ ...one, current: topicProjection("Invented image work", []), currentLength: 1 }, { ask: raw(ask) });
+  expect(titled).toMatchObject({ status: "available", decision: "continue-current", titleFlag: false });
   expect(Object.keys(ask.mock.calls[0]![1])).toEqual(["significantChange", "continueCurrent", "titleAdequate"]);
   expect(ask.mock.calls[0]![0]).toEqual({ current: { title: "Invented image work", messages: [] }, latestUserMessage: one.latestUserMessage });
   const untitled = { ...one, current: topicProjection(undefined, one.current.messages) };
-  expect(await routeTopic(untitled, { ask: raw(async (_s, q) => scriptedRoutingAnswers(q, 0.9)), now: () => 0 })).toMatchObject({ decision: "continue-current", titleFlag: null });
-  expect(await routeTopic(untitled, { ask: raw(async (_s, q) => scriptedRoutingAnswers(q, 0.45)), now: () => 0 })).toMatchObject({ decision: "create-new" });
+  expect(await routeTopic(untitled, { ask: raw(async (_s, q) => scriptedRoutingAnswers(q, 0.9)) })).toMatchObject({ decision: "continue-current", titleFlag: null });
+  expect(await routeTopic(untitled, { ask: raw(async (_s, q) => scriptedRoutingAnswers(q, 0.45)) })).toMatchObject({ decision: "create-new" });
 });
 it("keeps a full request in Chinese text within the size of the full one before it, at most the seller-message bound", async () => {
   // A full projection in Chinese: an 80-character title, the bound's messages at 512 characters and the latest at 2,048, three bytes a
@@ -45,8 +23,8 @@ it("keeps a full request in Chinese text within the size of the full one before 
   const result = await routeTopic(full, { ask: raw(async (state, questions) => {
     bytes = Buffer.byteLength(JSON.stringify({ model: "jev-latest", state, questions })); questionCount = Object.keys(questions).length;
     return scriptedRoutingAnswers(questions, 0.95);
-  }), now: () => 0 });
-  expect(result.decision).toBe("continue-current");
+  }) });
+  expect(result).toMatchObject({ decision: "continue-current" });
   expect(questionCount).toBe(3);
   expect(bytes).toBeLessThanOrEqual(56_355);
   // One more message would not fit, so the bound is as many as do.

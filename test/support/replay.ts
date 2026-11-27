@@ -135,9 +135,14 @@ export async function replayCase(registry: Registry, item: CalibrationCase, budg
     let reason: string | undefined;
     if (topic === undefined) verdict = "first";
     else {
-      const advisory = await routeTopic(input!, { ask: raw(async () => answered), now: () => 0 });
+      let read: Answers | undefined;
+      const advisory = await routeTopic(input!, { ask: async (state, questions) => {
+        const answer = await raw(async () => answered)(state, questions);
+        if (!("failure" in answer)) read = answer.answers as Answers;
+        return answer;
+      } });
       if (advisory.status === "available") {
-        answers = advisory.probabilities as Answers;
+        answers = read;
         verdict = advisory.decision === "create-new" ? "new" : advisory.titleFlag === true ? "continue, rewrite asked" : "continue";
       } else {
         verdict = "unavailable";
