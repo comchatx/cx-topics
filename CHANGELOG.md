@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- An install, the first or after a remove, again clears every title the package wrote and titles each conversation from its first message, as before 0.2.0. The package reads `.pi/cx-installs.json` again, and the built module exports `INSTALLS_FILE` and `installKey` again. 0.2.0's other changes stay.
+
 ## 0.2.0
 
 - A reinstall no longer clears the titles and asks Jev again about every seller message of every conversation. The session's progress carries on, so a message sent while the package was off is judged when the pass reaches it. The package reads no `.pi/cx-installs.json`, and the built module no longer exports `INSTALLS_FILE` or `installKey`.
